@@ -1,0 +1,41 @@
+import React from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { ToastContainer } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
+import { AuthProvider, useAuth } from './context/AuthContext';
+import Login from './components/auth/Login';
+import Register from './components/auth/Register';
+
+function ProtectedRoute({ children }) {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
+  }
+
+  return user ? children : <Navigate to="/login" />;
+}
+
+function App() {
+  return (
+    <AuthProvider>
+      <Router>
+        <div className="App">
+          <Routes>
+            <Route path="/login" element={<Login />} />
+            <Route path="/register" element={<Register />} />
+            <Route path="/dashboard" element={
+              <ProtectedRoute>
+                <div className="p-8">Dashboard (Coming soon)</div>
+              </ProtectedRoute>
+            } />
+            <Route path="/" element={<Navigate to="/dashboard" />} />
+          </Routes>
+          <ToastContainer position="top-right" autoClose={3000} />
+        </div>
+      </Router>
+    </AuthProvider>
+  );
+}
+
+export default App;
