@@ -1,76 +1,81 @@
-"""Database initialization script."""
+import psycopg2
+from config import Config
 
-import sys
-from pathlib import Path
+def init_database():
+    """Initialize database with all tables"""
+    conn = psycopg2.connect(Config.SQLALCHEMY_DATABASE_URI)
+    cur = conn.cursor()
 
-# Add backend directory to path
-backend_dir = Path(__file__).parent
-sys.path.insert(0, str(backend_dir))
+    # Create users table
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            id SERIAL PRIMARY KEY,
+            username VARCHAR(80) UNIQUE NOT NULL,
+            email VARCHAR(120) UNIQUE NOT NULL,
+            password_hash VARCHAR(255) NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+    """)
 
-from database import engine, Base, init_db
-from models import User, Project, AnalysisResult, WorkspaceNote, WorkspaceLayout
+    # Create projects table
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS projects (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+            name VARCHAR(200) NOT NULL,
+            description TEXT,
+            source_type VARCHAR(20) NOT NULL,
+            git_url VARCHAR(500),
+            file_path VARCHAR(500),
+            language VARCHAR(50),
+            framework VARCHAR(50),
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+    """)
 
+    # Create analysis_results table
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS analysis_results (
+            id SERIAL PRIMARY KEY,
+            project_id INTEGER REFERENCES projects(id) ON DELETE CASCADE,
+            analysis_type VARCHAR(50) NOT NULL,
+            result_data JSONB NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+    """)
 
-def create_tables():
-    """Create all database tables."""
-    print("Creating database tables...")
-    try:
-        # Import all models to ensure they're registered with Base
-        # This is already done via the models import above
+    # Create workspace_notes table
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS workspace_notes (
+            id SERIAL PRIMARY KEY,
+            project_id INTEGER REFERENCES projects(id) ON DELETE CASCADE,
+            analysis_type VARCHAR(50) NOT NULL,
+            note_text TEXT NOT NULL,
+            position_x FLOAT NOT NULL,
+            position_y FLOAT NOT NULL,
+            color VARCHAR(20) DEFAULT 'yellow',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+    """)
 
-        # Create all tables
-        Base.metadata.create_all(bind=engine)
+    # Create workspace_layouts table
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS workspace_layouts (
+            id SERIAL PRIMARY KEY,
+            project_id INTEGER REFERENCES projects(id) ON DELETE CASCADE,
+            analysis_type VARCHAR(50) NOT NULL,
+            layout_data JSONB NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+    """)
 
-        print("Successfully created the following tables:")
-        for table_name in Base.metadata.tables.keys():
-            print(f"  - {table_name}")
+    conn.commit()
+    cur.close()
+    conn.close()
+    print("Database initialized successfully")
 
-        return True
-    except Exception as e:
-        print(f"Error creating tables: {e}")
-        return False
-
-
-def drop_tables():
-    """Drop all database tables. Use with caution!"""
-    print("WARNING: Dropping all database tables...")
-    try:
-        Base.metadata.drop_all(bind=engine)
-        print("Successfully dropped all tables.")
-        return True
-    except Exception as e:
-        print(f"Error dropping tables: {e}")
-        return False
-
-
-def reset_database():
-    """Drop and recreate all tables. Use with caution!"""
-    print("Resetting database...")
-    if drop_tables():
-        return create_tables()
-    return False
-
-
-if __name__ == "__main__":
-    if len(sys.argv) > 1:
-        command = sys.argv[1].lower()
-        if command == "create":
-            create_tables()
-        elif command == "drop":
-            response = input("Are you sure you want to drop all tables? (yes/no): ")
-            if response.lower() == "yes":
-                drop_tables()
-            else:
-                print("Operation cancelled.")
-        elif command == "reset":
-            response = input("Are you sure you want to reset the database? (yes/no): ")
-            if response.lower() == "yes":
-                reset_database()
-            else:
-                print("Operation cancelled.")
-        else:
-            print(f"Unknown command: {command}")
-            print("Available commands: create, drop, reset")
-    else:
-        # Default: create tables
-        create_tables()
+if __name__ == '__main__':
+    init_database()

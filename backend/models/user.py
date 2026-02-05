@@ -1,30 +1,27 @@
-"""User model for authentication and user management."""
+from werkzeug.security import generate_password_hash, check_password_hash
 
-from sqlalchemy import Column, Integer, String, DateTime, Boolean
-from sqlalchemy.orm import relationship
-from sqlalchemy.sql import func
-from database import Base
+class User:
+    def __init__(self, id, username, email, password_hash, created_at):
+        self.id = id
+        self.username = username
+        self.email = email
+        self.password_hash = password_hash
+        self.created_at = created_at
 
+    @staticmethod
+    def hash_password(password):
+        """Hash a password for storing"""
+        return generate_password_hash(password)
 
-class User(Base):
-    """User model representing application users."""
+    def check_password(self, password):
+        """Check hashed password"""
+        return check_password_hash(self.password_hash, password)
 
-    __tablename__ = "users"
-
-    id = Column(Integer, primary_key=True, index=True)
-    username = Column(String(50), unique=True, nullable=False, index=True)
-    email = Column(String(100), unique=True, nullable=False, index=True)
-    hashed_password = Column(String(255), nullable=False)
-    full_name = Column(String(100))
-    is_active = Column(Boolean, default=True, nullable=False)
-    is_admin = Column(Boolean, default=False, nullable=False)
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
-
-    # Relationships
-    projects = relationship("Project", back_populates="owner", cascade="all, delete-orphan")
-    workspace_notes = relationship("WorkspaceNote", back_populates="user", cascade="all, delete-orphan")
-    workspace_layouts = relationship("WorkspaceLayout", back_populates="user", cascade="all, delete-orphan")
-
-    def __repr__(self):
-        return f"<User(id={self.id}, username='{self.username}', email='{self.email}')>"
+    def to_dict(self):
+        """Convert to dictionary"""
+        return {
+            'id': self.id,
+            'username': self.username,
+            'email': self.email,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
