@@ -25,6 +25,6 @@ class Project:
             'file_path': self.file_path,
             'language': self.language,
             'framework': self.framework,
-            'created_at': self.created_at.isoformat() if self.created_at else None,
-            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+            'created_at': self.created_at,  # SQLite returns timestamps as strings
+            'updated_at': self.updated_at   # SQLite returns timestamps as strings
         }

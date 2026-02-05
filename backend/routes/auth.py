@@ -21,22 +21,25 @@ def register():
         cur = conn.cursor()
 
         # Check if user exists
-        cur.execute('SELECT id FROM users WHERE username = %s OR email = %s', (username, email))
+        cur.execute('SELECT id FROM users WHERE username = ? OR email = ?', (username, email))
         if cur.fetchone():
             return jsonify({'error': 'User already exists'}), 409
 
         # Create user
         password_hash = User.hash_password(password)
         cur.execute(
-            'INSERT INTO users (username, email, password_hash) VALUES (%s, %s, %s) RETURNING id, created_at',
+            'INSERT INTO users (username, email, password_hash) VALUES (?, ?, ?)',
             (username, email, password_hash)
         )
+        user_id = cur.lastrowid
+
+        # Get created_at timestamp
+        cur.execute('SELECT created_at FROM users WHERE id = ?', (user_id,))
         result = cur.fetchone()
-        user_id = result['id']
         created_at = result['created_at']
 
-        # Create JWT token
-        access_token = create_access_token(identity=user_id)
+        # Create JWT token (identity must be string)
+        access_token = create_access_token(identity=str(user_id))
 
         user = User(user_id, username, email, password_hash, created_at)
 
@@ -59,7 +62,7 @@ def login():
     with get_connection() as conn:
         cur = conn.cursor()
 
-        cur.execute('SELECT * FROM users WHERE username = %s', (username,))
+        cur.execute('SELECT * FROM users WHERE username = ?', (username,))
         user_data = cur.fetchone()
 
     if not user_data:
@@ -70,7 +73,7 @@ def login():
     if not user.check_password(password):
         return jsonify({'error': 'Invalid credentials'}), 401
 
-    access_token = create_access_token(identity=user.id)
+    access_token = create_access_token(identity=str(user.id))
 
     return jsonify({
         'access_token': access_token,

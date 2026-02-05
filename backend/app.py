@@ -1,7 +1,8 @@
-from flask import Flask
+from flask import Flask, jsonify
 from flask_jwt_extended import JWTManager
 from flask_cors import CORS
 from config import Config
+import traceback
 
 app = Flask(__name__)
 app.config.from_object(Config)
@@ -9,6 +10,40 @@ app.config.from_object(Config)
 # Initialize extensions
 jwt = JWTManager(app)
 CORS(app)
+
+# JWT error handlers
+@jwt.invalid_token_loader
+def invalid_token_callback(error):
+    print(f"JWT INVALID TOKEN: {error}", flush=True)
+    return jsonify({'error': 'Invalid token', 'details': str(error)}), 422
+
+@jwt.unauthorized_loader
+def unauthorized_callback(error):
+    print(f"JWT UNAUTHORIZED: {error}", flush=True)
+    return jsonify({'error': 'Missing Authorization header', 'details': str(error)}), 422
+
+@jwt.expired_token_loader
+def expired_token_callback(jwt_header, jwt_payload):
+    print(f"JWT EXPIRED: header={jwt_header}, payload={jwt_payload}", flush=True)
+    return jsonify({'error': 'Token has expired'}), 422
+
+@jwt.revoked_token_loader
+def revoked_token_callback(jwt_header, jwt_payload):
+    print(f"JWT REVOKED: header={jwt_header}, payload={jwt_payload}", flush=True)
+    return jsonify({'error': 'Token has been revoked'}), 422
+
+# Error handlers
+@app.errorhandler(Exception)
+def handle_error(error):
+    print(f"ERROR: {error}")
+    print(traceback.format_exc())
+    return jsonify({'error': str(error)}), 500
+
+@app.errorhandler(422)
+def handle_unprocessable_entity(error):
+    print(f"422 ERROR: {error}")
+    print(traceback.format_exc())
+    return jsonify({'error': 'Unprocessable entity', 'details': str(error)}), 422
 
 # Register routes
 from routes import init_routes

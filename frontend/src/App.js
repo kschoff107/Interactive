@@ -5,6 +5,9 @@ import 'react-toastify/dist/ReactToastify.css';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Login from './components/auth/Login';
 import Register from './components/auth/Register';
+import Dashboard from './components/dashboard/Dashboard';
+import ProjectUpload from './components/project/ProjectUpload';
+import ProjectVisualization from './components/project/ProjectVisualization';
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth();
@@ -26,7 +29,22 @@ function App() {
             <Route path="/register" element={<Register />} />
             <Route path="/dashboard" element={
               <ProtectedRoute>
-                <div className="p-8">Dashboard (Coming soon)</div>
+                <Dashboard />
+              </ProtectedRoute>
+            } />
+            <Route path="/project/:projectId/upload" element={
+              <ProtectedRoute>
+                <ProjectUpload />
+              </ProtectedRoute>
+            } />
+            <Route path="/project/:projectId/visualize" element={
+              <ProtectedRoute>
+                <ProjectVisualization />
+              </ProtectedRoute>
+            } />
+            <Route path="/project/:projectId" element={
+              <ProtectedRoute>
+                <ProjectVisualization />
               </ProtectedRoute>
             } />
             <Route path="/" element={<Navigate to="/dashboard" />} />

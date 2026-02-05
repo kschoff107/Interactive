@@ -23,5 +23,5 @@ class User:
             'id': self.id,
             'username': self.username,
             'email': self.email,
-            'created_at': self.created_at.isoformat() if self.created_at else None
+            'created_at': self.created_at  # SQLite returns timestamps as strings
         }
