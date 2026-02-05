@@ -228,3 +228,93 @@ def upload_project_files(project_id):
         except Exception as e:
             conn.rollback()
             return jsonify({'error': f'Analysis failed: {str(e)}'}), 500
+
+# GET /api/projects/<project_id>/layout
+@projects_bp.route('/<int:project_id>/layout', methods=['GET'])
+@jwt_required()
+def get_workspace_layout(project_id):
+    """Get saved workspace layout for a project"""
+    user_id = int(get_jwt_identity())
+
+    with get_connection() as conn:
+        cur = conn.cursor()
+
+        # Verify project ownership
+        cur.execute('SELECT * FROM projects WHERE id = ? AND user_id = ?',
+                   (project_id, user_id))
+        if not cur.fetchone():
+            return jsonify({'error': 'Project not found'}), 404
+
+        # Get layout for database_schema analysis type
+        cur.execute(
+            '''SELECT * FROM workspace_layouts
+               WHERE project_id = ? AND analysis_type = ?
+               ORDER BY updated_at DESC LIMIT 1''',
+            (project_id, 'database_schema')
+        )
+        layout_data = cur.fetchone()
+
+    if not layout_data:
+        return jsonify({'layout': None}), 200
+
+    return jsonify({
+        'layout': {
+            'id': layout_data['id'],
+            'layout_data': json.loads(layout_data['layout_data']),
+            'updated_at': layout_data['updated_at']
+        }
+    }), 200
+
+
+# POST /api/projects/<project_id>/layout
+@projects_bp.route('/<int:project_id>/layout', methods=['POST'])
+@jwt_required()
+def save_workspace_layout(project_id):
+    """Save or update workspace layout for a project"""
+    user_id = int(get_jwt_identity())
+    data = request.get_json()
+
+    layout_data = data.get('layout_data')
+    if not layout_data:
+        return jsonify({'error': 'layout_data is required'}), 400
+
+    with get_connection() as conn:
+        cur = conn.cursor()
+
+        # Verify project ownership
+        cur.execute('SELECT * FROM projects WHERE id = ? AND user_id = ?',
+                   (project_id, user_id))
+        if not cur.fetchone():
+            return jsonify({'error': 'Project not found'}), 404
+
+        analysis_type = 'database_schema'
+
+        # Check if layout exists
+        cur.execute(
+            'SELECT id FROM workspace_layouts WHERE project_id = ? AND analysis_type = ?',
+            (project_id, analysis_type)
+        )
+        existing = cur.fetchone()
+
+        if existing:
+            # Update
+            cur.execute(
+                '''UPDATE workspace_layouts
+                   SET layout_data = ?, updated_at = CURRENT_TIMESTAMP
+                   WHERE id = ?''',
+                (json.dumps(layout_data), existing['id'])
+            )
+            layout_id = existing['id']
+        else:
+            # Create
+            cur.execute(
+                '''INSERT INTO workspace_layouts (project_id, analysis_type, layout_data)
+                   VALUES (?, ?, ?)''',
+                (project_id, analysis_type, json.dumps(layout_data))
+            )
+            layout_id = cur.lastrowid
+
+    return jsonify({
+        'message': 'Layout saved successfully',
+        'layout_id': layout_id
+    }), 200
