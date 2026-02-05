@@ -1,2 +1,26 @@
 # Gitignore file
 .worktrees/
+
+# Backend
+backend/__pycache__/
+backend/*.pyc
+backend/.env
+backend/venv/
+backend/.pytest_cache/
+
+# Frontend
+frontend/node_modules/
+frontend/build/
+frontend/.env
+
+# Storage
+storage/*
+!storage/.gitkeep
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
