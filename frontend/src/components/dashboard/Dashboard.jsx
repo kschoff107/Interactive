@@ -10,6 +10,8 @@ export default function Dashboard() {
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [projectToDelete, setProjectToDelete] = useState(null);
   const [newProject, setNewProject] = useState({ name: '', description: '' });
 
   useEffect(() => {
@@ -43,6 +45,24 @@ export default function Dashboard() {
       navigate(`/project/${response.data.project.id}/upload`);
     } catch (error) {
       toast.error(error.response?.data?.error || 'Failed to create project');
+    }
+  };
+
+  const handleDeleteClick = (e, project) => {
+    e.stopPropagation();
+    setProjectToDelete(project);
+    setShowDeleteModal(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    try {
+      await api.delete(`/projects/${projectToDelete.id}`);
+      setProjects(projects.filter(p => p.id !== projectToDelete.id));
+      setShowDeleteModal(false);
+      setProjectToDelete(null);
+      toast.success('Project deleted successfully');
+    } catch (error) {
+      toast.error(error.response?.data?.error || 'Failed to delete project');
     }
   };
 
@@ -105,10 +125,19 @@ export default function Dashboard() {
             {projects.map((project) => (
               <div
                 key={project.id}
-                className="bg-white rounded-lg shadow p-6 hover:shadow-lg transition cursor-pointer"
+                className="bg-white rounded-lg shadow p-6 hover:shadow-lg transition cursor-pointer relative"
                 onClick={() => navigate(`/project/${project.id}`)}
               >
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                <button
+                  onClick={(e) => handleDeleteClick(e, project)}
+                  className="absolute top-4 right-4 text-gray-400 hover:text-red-600 transition"
+                  title="Delete project"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                </button>
+                <h3 className="text-lg font-semibold text-gray-900 mb-2 pr-8">
                   {project.name}
                 </h3>
                 <p className="text-sm text-gray-600 mb-4">
@@ -131,6 +160,35 @@ export default function Dashboard() {
           </div>
         )}
       </main>
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+            <h3 className="text-lg font-semibold mb-4 text-gray-900">Delete Project</h3>
+            <p className="text-gray-600 mb-6">
+              Are you sure you want to delete "{projectToDelete?.name}"? This action cannot be undone.
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => {
+                  setShowDeleteModal(false);
+                  setProjectToDelete(null);
+                }}
+                className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-md transition"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteConfirm}
+                className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Create Project Modal */}
       {showCreateModal && (

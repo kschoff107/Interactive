@@ -55,6 +55,27 @@ def get_analysis(project_id):
         'created_at': analysis_data['created_at']
     }), 200
 
+@projects_bp.route('/<int:project_id>', methods=['DELETE'])
+@jwt_required()
+def delete_project(project_id):
+    """Delete a project"""
+    user_id = int(get_jwt_identity())
+
+    with get_connection() as conn:
+        cur = conn.cursor()
+
+        # Verify project ownership
+        cur.execute('SELECT * FROM projects WHERE id = ? AND user_id = ?', (project_id, user_id))
+        project_data = cur.fetchone()
+
+        if not project_data:
+            return jsonify({'error': 'Project not found'}), 404
+
+        # Delete project (cascade will delete related records)
+        cur.execute('DELETE FROM projects WHERE id = ?', (project_id,))
+
+    return jsonify({'message': 'Project deleted successfully'}), 200
+
 @projects_bp.route('', methods=['GET'])
 @jwt_required()
 def list_projects():
