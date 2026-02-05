@@ -10,12 +10,12 @@ from parsers.parser_manager import ParserManager, UnsupportedFrameworkError
 
 projects_bp = Blueprint('projects', __name__)
 
-@projects_bp.before_request
-def log_request():
-    import sys
-    print(f"DEBUG: Request to {request.path}", file=sys.stderr, flush=True)
-    print(f"DEBUG: Method = {request.method}", file=sys.stderr, flush=True)
-    print(f"DEBUG: Authorization header = {request.headers.get('Authorization')}", file=sys.stderr, flush=True)
+# @projects_bp.before_request
+# def log_request():
+#     import sys
+#     print(f"DEBUG: Request to {request.path}", file=sys.stderr, flush=True)
+#     print(f"DEBUG: Method = {request.method}", file=sys.stderr, flush=True)
+#     print(f"DEBUG: Authorization header = {request.headers.get('Authorization')}", file=sys.stderr, flush=True)
 
 @projects_bp.route('/test', methods=['GET'])
 def test_endpoint():
@@ -99,36 +99,52 @@ def list_projects():
 @jwt_required()
 def create_project():
     """Create a new project"""
+    import sys
     from flask import request
-    print(f"DEBUG: Headers = {dict(request.headers)}")
-    print(f"DEBUG: Authorization = {request.headers.get('Authorization')}")
-    user_id = int(get_jwt_identity())  # Convert from string to int
-    data = request.get_json()
+    try:
+        print(f"DEBUG: create_project called", file=sys.stderr, flush=True)
+        user_id = int(get_jwt_identity())
+        print(f"DEBUG: user_id = {user_id}", file=sys.stderr, flush=True)
+        data = request.get_json()
+        print(f"DEBUG: data = {data}", file=sys.stderr, flush=True)
 
-    name = data.get('name')
-    description = data.get('description', '')
+        name = data.get('name')
+        description = data.get('description', '')
 
-    if not name:
-        return jsonify({'error': 'Project name is required'}), 400
+        if not name:
+            return jsonify({'error': 'Project name is required'}), 400
 
-    with get_connection() as conn:
-        cur = conn.cursor()
+        print(f"DEBUG: About to get connection", file=sys.stderr, flush=True)
+        with get_connection() as conn:
+            print(f"DEBUG: Got connection", file=sys.stderr, flush=True)
+            cur = conn.cursor()
 
-        # Create project (initially without source)
-        cur.execute(
-            '''INSERT INTO projects (user_id, name, description, source_type)
-               VALUES (?, ?, ?, ?)''',
-            (user_id, name, description, 'upload')
-        )
-        project_id = cur.lastrowid
+            # Create project (initially without source)
+            print(f"DEBUG: About to insert project", file=sys.stderr, flush=True)
+            cur.execute(
+                '''INSERT INTO projects (user_id, name, description, source_type)
+                   VALUES (?, ?, ?, ?)''',
+                (user_id, name, description, 'upload')
+            )
+            project_id = cur.lastrowid
+            print(f"DEBUG: Inserted project with id={project_id}", file=sys.stderr, flush=True)
 
-        # Get created project
-        cur.execute('SELECT * FROM projects WHERE id = ?', (project_id,))
-        project_data = cur.fetchone()
+            # Get created project
+            print(f"DEBUG: About to fetch project", file=sys.stderr, flush=True)
+            cur.execute('SELECT * FROM projects WHERE id = ?', (project_id,))
+            project_data = cur.fetchone()
+            print(f"DEBUG: Fetched project_data = {project_data}", file=sys.stderr, flush=True)
 
-    project = Project(**project_data)
+        print(f"DEBUG: About to create Project object", file=sys.stderr, flush=True)
+        project = Project(**project_data)
+        print(f"DEBUG: Created Project object", file=sys.stderr, flush=True)
 
-    return jsonify({'project': project.to_dict()}), 201
+        return jsonify({'project': project.to_dict()}), 201
+    except Exception as e:
+        print(f"DEBUG ERROR in create_project: {e}", file=sys.stderr, flush=True)
+        import traceback
+        traceback.print_exc(file=sys.stderr)
+        raise
 
 @projects_bp.route('/<int:project_id>', methods=['GET'])
 @jwt_required()

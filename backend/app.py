@@ -35,9 +35,11 @@ def revoked_token_callback(jwt_header, jwt_payload):
 # Error handlers
 @app.errorhandler(Exception)
 def handle_error(error):
-    print(f"ERROR: {error}")
-    print(traceback.format_exc())
-    return jsonify({'error': str(error)}), 500
+    return jsonify({
+        'error': str(error),
+        'error_type': type(error).__name__,
+        'errno': getattr(error, 'errno', None)
+    }), 500
 
 @app.errorhandler(422)
 def handle_unprocessable_entity(error):
@@ -52,4 +54,5 @@ init_routes(app)
 if __name__ == '__main__':
     from init_db import init_database
     init_database()
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    # Disable reloader to avoid Windows-specific issues with file handles
+    app.run(debug=True, host='0.0.0.0', port=5000, use_reloader=False)
