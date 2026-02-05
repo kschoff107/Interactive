@@ -11,11 +11,13 @@ import ReactFlow, {
 import 'reactflow/dist/style.css';
 import api, { projectsAPI } from '../../services/api';
 import { toast } from 'react-toastify';
+import { useTheme } from '../../context/ThemeContext';
 import { getLayoutedElements, serializeLayout, applySavedLayout } from '../../utils/layoutUtils';
 
 export default function ProjectVisualization() {
   const { projectId } = useParams();
   const navigate = useNavigate();
+  const { isDark, toggleTheme } = useTheme();
   const [project, setProject] = useState(null);
   const [loading, setLoading] = useState(true);
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
@@ -336,26 +338,26 @@ export default function ProjectVisualization() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-gray-600">Loading visualization...</div>
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
+        <div className="text-gray-600 dark:text-gray-300">Loading visualization...</div>
       </div>
     );
   }
 
   return (
-    <div className="h-screen flex flex-col bg-gray-50">
+    <div className="h-screen flex flex-col bg-gray-50 dark:bg-gray-900">
       {/* Header */}
-      <header className="bg-white shadow-sm px-6 py-4 flex items-center justify-between">
+      <header className="bg-white dark:bg-gray-800 shadow-sm px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-4">
           <button
             onClick={() => navigate('/dashboard')}
-            className="text-blue-600 hover:text-blue-700"
+            className="text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
           >
             ← Dashboard
           </button>
           <div>
-            <h1 className="text-xl font-bold text-gray-900">{project?.name}</h1>
-            <p className="text-sm text-gray-500">Database Schema Visualization</p>
+            <h1 className="text-xl font-bold text-gray-900 dark:text-white">{project?.name}</h1>
+            <p className="text-sm text-gray-500 dark:text-gray-400">Database Schema Visualization</p>
           </div>
         </div>
         <div className="flex items-center gap-3">
@@ -450,8 +452,8 @@ export default function ProjectVisualization() {
       </div>
 
       {/* Info Panel */}
-      <div className="bg-white border-t border-gray-200 px-6 py-3">
-        <div className="flex items-center justify-between text-sm text-gray-600">
+      <div className="bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 px-6 py-3">
+        <div className="flex items-center justify-between text-sm text-gray-600 dark:text-gray-300">
           <div>
             <span className="font-medium">Tables:</span> {nodes.length} |{' '}
             <span className="font-medium">Relationships:</span> {edges.length}
