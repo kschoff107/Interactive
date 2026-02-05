@@ -1,3 +1,16 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* ReactFlow edge label styling */
+.react-flow__edge-text {
+  font-size: 18px;
+  font-weight: 500;
+}
+
+.react-flow__edge-textbg {
+  fill: #4b5563;
+  fill-opacity: 1;
+  rx: 4;
+  ry: 4;
+}

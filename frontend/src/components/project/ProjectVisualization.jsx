@@ -150,6 +150,17 @@ export default function ProjectVisualization() {
             label: rel.from_column,
             animated: true,
             style: { stroke: colors[fromIndex % colors.length] },
+            labelStyle: {
+              fontSize: '18px',
+              fontWeight: 500,
+              fill: '#ffffff',
+            },
+            labelBgStyle: {
+              fill: '#4b5563',
+              fillOpacity: 1,
+            },
+            labelBgPadding: [8, 4],
+            labelBgBorderRadius: 4,
           });
         }
       });
@@ -213,6 +224,17 @@ export default function ProjectVisualization() {
             label: rel.from_column,
             animated: true,
             style: { stroke: colors[fromIndex % colors.length] },
+            labelStyle: {
+              fontSize: '18px',
+              fontWeight: 500,
+              fill: '#ffffff',
+            },
+            labelBgStyle: {
+              fill: '#4b5563',
+              fillOpacity: 1,
+            },
+            labelBgPadding: [8, 4],
+            labelBgBorderRadius: 4,
           });
         }
       });
