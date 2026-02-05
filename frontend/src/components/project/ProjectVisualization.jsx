@@ -160,7 +160,7 @@ export default function ProjectVisualization() {
               fill: '#ffffff',
             },
             labelBgStyle: {
-              fill: '#4b5563',
+              fill: colors[fromIndex % colors.length],
               fillOpacity: 1,
             },
             labelBgPadding: [8, 4],
@@ -235,7 +235,7 @@ export default function ProjectVisualization() {
               fill: '#ffffff',
             },
             labelBgStyle: {
-              fill: '#4b5563',
+              fill: colors[fromIndex % colors.length],
               fillOpacity: 1,
             },
             labelBgPadding: [8, 4],
