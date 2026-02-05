@@ -14,6 +14,8 @@ def clean_database():
     """Clean database before each test"""
     with get_connection() as conn:
         cur = conn.cursor()
+        # Delete in order due to foreign key constraints
+        cur.execute("DELETE FROM projects")
         cur.execute("DELETE FROM users")
         conn.commit()
         cur.close()
