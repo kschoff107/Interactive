@@ -11,11 +11,13 @@ import ReactFlow, {
 import 'reactflow/dist/style.css';
 import api, { projectsAPI } from '../../services/api';
 import { toast } from 'react-toastify';
+import { useTheme } from '../../context/ThemeContext';
 import { getLayoutedElements, serializeLayout, applySavedLayout } from '../../utils/layoutUtils';
 
 export default function ProjectVisualization() {
   const { projectId } = useParams();
   const navigate = useNavigate();
+  const { isDark, toggleTheme } = useTheme();
   const [project, setProject] = useState(null);
   const [loading, setLoading] = useState(true);
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
@@ -128,7 +130,8 @@ export default function ProjectVisualization() {
         },
         position: { x, y },
         style: {
-          background: '#fff',
+          background: 'var(--node-bg)',
+          color: 'var(--node-text)',
           border: `2px solid ${colors[index % colors.length]}`,
           borderRadius: '8px',
           width: 220,
@@ -202,7 +205,8 @@ export default function ProjectVisualization() {
         },
         position: { x: 0, y: 0 }, // Will be updated by applySavedLayout
         style: {
-          background: '#fff',
+          background: 'var(--node-bg)',
+          color: 'var(--node-text)',
           border: `2px solid ${colors[index % colors.length]}`,
           borderRadius: '8px',
           width: 220,
@@ -265,7 +269,8 @@ export default function ProjectVisualization() {
         },
         position: { x: 250, y: 150 },
         style: {
-          background: '#fff',
+          background: 'var(--node-bg)',
+          color: 'var(--node-text)',
           border: '2px solid #d1d5db',
           borderRadius: '8px',
           width: 200,
@@ -336,26 +341,26 @@ export default function ProjectVisualization() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-gray-600">Loading visualization...</div>
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
+        <div className="text-gray-600 dark:text-gray-300">Loading visualization...</div>
       </div>
     );
   }
 
   return (
-    <div className="h-screen flex flex-col bg-gray-50">
+    <div className="h-screen flex flex-col bg-gray-50 dark:bg-gray-900">
       {/* Header */}
-      <header className="bg-white shadow-sm px-6 py-4 flex items-center justify-between">
+      <header className="bg-white dark:bg-gray-800 shadow-sm px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-4">
           <button
             onClick={() => navigate('/dashboard')}
-            className="text-blue-600 hover:text-blue-700"
+            className="text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
           >
             ← Dashboard
           </button>
           <div>
-            <h1 className="text-xl font-bold text-gray-900">{project?.name}</h1>
-            <p className="text-sm text-gray-500">Database Schema Visualization</p>
+            <h1 className="text-xl font-bold text-gray-900 dark:text-white">{project?.name}</h1>
+            <p className="text-sm text-gray-500 dark:text-gray-400">Database Schema Visualization</p>
           </div>
         </div>
         <div className="flex items-center gap-3">
@@ -365,7 +370,7 @@ export default function ProjectVisualization() {
               <button
                 onClick={handleQuickOrganize}
                 disabled={isLayouting || nodes.length === 0}
-                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                className="px-4 py-2 bg-blue-600 dark:bg-blue-700 text-white rounded hover:bg-blue-700 dark:hover:bg-blue-800 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
               >
                 {isLayouting ? (
                   <>
@@ -383,7 +388,7 @@ export default function ProjectVisualization() {
               <button
                 onClick={handleUndoLayout}
                 disabled={!previousLayout}
-                className="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded hover:bg-gray-300 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Undo Layout
               </button>
@@ -391,7 +396,7 @@ export default function ProjectVisualization() {
               <button
                 onClick={handleSaveLayout}
                 disabled={isSaving || !hasUnsavedChanges}
-                className="px-4 py-2 border border-gray-300 text-gray-700 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 rounded hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
               >
                 {isSaving ? (
                   <>
@@ -410,7 +415,7 @@ export default function ProjectVisualization() {
               </button>
 
               {lastSaved && (
-                <span className="text-xs text-gray-500">
+                <span className="text-xs text-gray-500 dark:text-gray-400">
                   Saved {new Date(lastSaved).toLocaleTimeString()}
                 </span>
               )}
@@ -418,14 +423,14 @@ export default function ProjectVisualization() {
           )}
 
           {/* Project Tags */}
-          <div className="flex gap-2 ml-4 border-l pl-4">
+          <div className="flex gap-2 ml-4 border-l dark:border-gray-600 pl-4">
             {project?.language && (
-              <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded text-sm">
+              <span className="px-3 py-1 bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 rounded text-sm">
                 {project.language}
               </span>
             )}
             {project?.framework && (
-              <span className="px-3 py-1 bg-green-100 text-green-700 rounded text-sm">
+              <span className="px-3 py-1 bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300 rounded text-sm">
                 {project.framework}
               </span>
             )}
@@ -434,7 +439,34 @@ export default function ProjectVisualization() {
       </header>
 
       {/* Visualization */}
-      <div className="flex-1">
+      <div className="flex-1 relative">
+        <style>{`
+          .react-flow__node {
+            --node-bg: ${isDark ? '#1f2937' : '#ffffff'};
+            --node-text: ${isDark ? '#f3f4f6' : '#111827'};
+          }
+          .react-flow__background {
+            background-color: ${isDark ? '#111827' : '#f9fafb'};
+          }
+          .react-flow__edge-path {
+            stroke: ${isDark ? '#6b7280' : '#9ca3af'};
+          }
+          .react-flow__minimap {
+            background-color: ${isDark ? '#1f2937' : '#ffffff'};
+          }
+          .react-flow__controls {
+            background-color: ${isDark ? '#1f2937' : '#ffffff'};
+            border: 1px solid ${isDark ? '#374151' : '#e5e7eb'};
+          }
+          .react-flow__controls-button {
+            background-color: ${isDark ? '#1f2937' : '#ffffff'};
+            color: ${isDark ? '#f3f4f6' : '#111827'};
+            border-bottom: 1px solid ${isDark ? '#374151' : '#e5e7eb'};
+          }
+          .react-flow__controls-button:hover {
+            background-color: ${isDark ? '#374151' : '#f3f4f6'};
+          }
+        `}</style>
         <ReactFlow
           nodes={nodes}
           edges={edges}
@@ -447,11 +479,29 @@ export default function ProjectVisualization() {
           <MiniMap />
           <Background variant="dots" gap={12} size={1} />
         </ReactFlow>
+
+        {/* Theme Toggle Button */}
+        <button
+          onClick={toggleTheme}
+          className="absolute bottom-5 left-5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded shadow-md p-2 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+          title={isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+          style={{ zIndex: 5 }}
+        >
+          {isDark ? (
+            <svg className="w-5 h-5 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z" clipRule="evenodd" />
+            </svg>
+          ) : (
+            <svg className="w-5 h-5 text-gray-700" fill="currentColor" viewBox="0 0 20 20">
+              <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z" />
+            </svg>
+          )}
+        </button>
       </div>
 
       {/* Info Panel */}
-      <div className="bg-white border-t border-gray-200 px-6 py-3">
-        <div className="flex items-center justify-between text-sm text-gray-600">
+      <div className="bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 px-6 py-3">
+        <div className="flex items-center justify-between text-sm text-gray-600 dark:text-gray-300">
           <div>
             <span className="font-medium">Tables:</span> {nodes.length} |{' '}
             <span className="font-medium">Relationships:</span> {edges.length}
