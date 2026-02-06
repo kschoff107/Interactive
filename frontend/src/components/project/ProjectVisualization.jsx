@@ -39,6 +39,7 @@ export default function ProjectVisualization() {
   const [runtimeFlowData, setRuntimeFlowData] = useState(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [flowLoading, setFlowLoading] = useState(false);
+  const [flowLayoutTrigger, setFlowLayoutTrigger] = useState(0);
 
   // Layout state
   const [previousLayout, setPreviousLayout] = useState(null);
@@ -351,8 +352,10 @@ export default function ProjectVisualization() {
 
       toast.success('Layout organized!');
     } else if (activeView === 'flow') {
-      // Flow view handles its own layout internally
+      // Trigger re-layout in FlowVisualization component
+      setFlowLayoutTrigger(prev => prev + 1);
       setTimeout(() => setIsLayouting(false), 300);
+      toast.success('Layout organized!');
     }
   };
 
@@ -691,8 +694,8 @@ export default function ProjectVisualization() {
               <FlowVisualization
                 flowData={runtimeFlowData}
                 isDark={isDark}
-                onQuickOrganize={handleQuickOrganize}
                 onToggleTheme={toggleTheme}
+                layoutTrigger={flowLayoutTrigger}
               />
             )}
 

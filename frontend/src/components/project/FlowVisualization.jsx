@@ -94,12 +94,13 @@ const getLayoutedFlowElements = (nodes, edges, direction = 'TB') => {
   return { nodes: layoutedNodes, edges: layoutedEdges };
 };
 
-export default function FlowVisualization({ flowData, isDark, onQuickOrganize, onToggleTheme }) {
+export default function FlowVisualization({ flowData, isDark, onToggleTheme, layoutTrigger }) {
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
-  const [isLayouting, setIsLayouting] = useState(false);
+  const [initialNodes, setInitialNodes] = useState([]);
+  const [initialEdges, setInitialEdges] = useState([]);
 
-  // Transform and layout flow data
+  // Transform and layout flow data on initial load
   useEffect(() => {
     if (flowData) {
       const { nodes: flowNodes, edges: flowEdges } = transformFlowData(flowData);
@@ -111,24 +112,25 @@ export default function FlowVisualization({ flowData, isDark, onQuickOrganize, o
         );
         setNodes(layoutedNodes);
         setEdges(layoutedEdges);
+        // Store initial state for re-layout
+        setInitialNodes(flowNodes);
+        setInitialEdges(flowEdges);
       }
     }
   }, [flowData, setNodes, setEdges]);
 
-  // Handle quick organize - pass to parent
-  const handleQuickOrganize = () => {
-    if (onQuickOrganize) {
-      setIsLayouting(true);
+  // Re-layout when layoutTrigger changes
+  useEffect(() => {
+    if (layoutTrigger > 0 && initialNodes.length > 0) {
+      // Re-apply layout using current nodes (which may have been moved)
       const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedFlowElements(
-        nodes,
-        edges
+        initialNodes,
+        initialEdges
       );
       setNodes(layoutedNodes);
       setEdges(layoutedEdges);
-      setTimeout(() => setIsLayouting(false), 300);
-      onQuickOrganize();
     }
-  };
+  }, [layoutTrigger, initialNodes, initialEdges, setNodes, setEdges]);
 
   // Calculate statistics
   const statistics = useMemo(() => {
