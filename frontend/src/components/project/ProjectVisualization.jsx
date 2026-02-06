@@ -330,24 +330,30 @@ export default function ProjectVisualization() {
 
   // Event Handlers
   const handleQuickOrganize = async () => {
-    if (nodes.length === 0) return;
+    if (activeView === 'schema' && nodes.length === 0) return;
+    if (activeView === 'flow' && !runtimeFlowData) return;
 
     setIsLayouting(true);
 
-    // Save current layout for undo
-    setPreviousLayout({
-      nodes: nodes.map(n => ({ id: n.id, position: { ...n.position } }))
-    });
+    if (activeView === 'schema') {
+      // Save current layout for undo
+      setPreviousLayout({
+        nodes: nodes.map(n => ({ id: n.id, position: { ...n.position } }))
+      });
 
-    // Apply dagre layout
-    const { nodes: layoutedNodes, edges: processedEdges } = getLayoutedElements(nodes, edges, 'TB');
+      // Apply dagre layout
+      const { nodes: layoutedNodes, edges: processedEdges } = getLayoutedElements(nodes, edges, 'TB');
 
-    setNodes(layoutedNodes);
-    setEdges(processedEdges);
-    setHasUnsavedChanges(true);
-    setIsLayouting(false);
+      setNodes(layoutedNodes);
+      setEdges(processedEdges);
+      setHasUnsavedChanges(true);
+      setIsLayouting(false);
 
-    toast.success('Layout organized!');
+      toast.success('Layout organized!');
+    } else if (activeView === 'flow') {
+      // Flow view handles its own layout internally
+      setTimeout(() => setIsLayouting(false), 300);
+    }
   };
 
   const handleUndoLayout = () => {
@@ -530,8 +536,8 @@ export default function ProjectVisualization() {
             </button>
           )}
 
-          {/* Layout Controls - Only show for schema view */}
-          {activeView === 'schema' && nodes.length > 0 && (
+          {/* Layout Controls - Show for both schema and flow views */}
+          {((activeView === 'schema' && nodes.length > 0) || (activeView === 'flow' && runtimeFlowData)) && (
             <>
               <button
                 onClick={handleQuickOrganize}
@@ -682,7 +688,12 @@ export default function ProjectVisualization() {
             )}
 
             {activeView === 'flow' && (
-              <FlowVisualization flowData={runtimeFlowData} isDark={isDark} />
+              <FlowVisualization
+                flowData={runtimeFlowData}
+                isDark={isDark}
+                onQuickOrganize={handleQuickOrganize}
+                onToggleTheme={toggleTheme}
+              />
             )}
 
             {activeView !== 'schema' && activeView !== 'flow' && (
