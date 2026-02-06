@@ -15,6 +15,7 @@ import { toast } from 'react-toastify';
 import { useTheme } from '../../context/ThemeContext';
 import { getLayoutedElements, serializeLayout, applySavedLayout } from '../../utils/layoutUtils';
 import StickyNote from './StickyNote';
+import Sidebar from './Sidebar';
 
 // Register custom node types
 const nodeTypes = {
@@ -29,6 +30,9 @@ export default function ProjectVisualization() {
   const [loading, setLoading] = useState(true);
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+
+  // View state
+  const [activeView, setActiveView] = useState('schema');
 
   // Layout state
   const [previousLayout, setPreviousLayout] = useState(null);
@@ -434,7 +438,7 @@ export default function ProjectVisualization() {
   return (
     <div className="h-screen flex flex-col bg-gray-50 dark:bg-gray-900">
       {/* Header */}
-      <header className="bg-white dark:bg-gray-800 shadow-sm px-6 py-4 flex items-center justify-between">
+      <header className="bg-white dark:bg-gray-800 shadow-sm px-6 py-4 flex items-center justify-between z-10">
         <div className="flex items-center gap-4">
           <button
             onClick={() => navigate('/dashboard')}
@@ -444,7 +448,12 @@ export default function ProjectVisualization() {
           </button>
           <div>
             <h1 className="text-xl font-bold text-gray-900 dark:text-white">{project?.name}</h1>
-            <p className="text-sm text-gray-500 dark:text-gray-400">Database Schema Visualization</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              {activeView === 'schema' && 'Database Schema Visualization'}
+              {activeView === 'flow' && 'Runtime Flow Visualization'}
+              {activeView === 'api' && 'API Routes Visualization'}
+              {activeView === 'structure' && 'Code Structure Visualization'}
+            </p>
           </div>
         </div>
         <div className="flex items-center gap-3">
@@ -522,8 +531,15 @@ export default function ProjectVisualization() {
         </div>
       </header>
 
-      {/* Visualization */}
-      <div className="flex-1 relative">
+      {/* Main Content with Sidebar */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* Sidebar */}
+        <Sidebar activeView={activeView} onViewChange={setActiveView} />
+
+        {/* Visualization Area */}
+        <div className="flex-1 flex flex-col">
+          {/* Visualization */}
+          <div className="flex-1 relative">
         <style>{`
           .react-flow__node {
             --node-bg: ${isDark ? '#1f2937' : '#ffffff'};
@@ -589,15 +605,17 @@ export default function ProjectVisualization() {
         </ReactFlow>
       </div>
 
-      {/* Info Panel */}
-      <div className="bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 px-6 py-3">
-        <div className="flex items-center justify-between text-sm text-gray-600 dark:text-gray-300">
-          <div>
-            <span className="font-medium">Tables:</span> {nodes.length} |{' '}
-            <span className="font-medium">Relationships:</span> {edges.length}
-          </div>
-          <div className="text-xs">
-            Tip: Drag nodes to rearrange, scroll to zoom, click and drag background to pan
+          {/* Info Panel */}
+          <div className="bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 px-6 py-3">
+            <div className="flex items-center justify-between text-sm text-gray-600 dark:text-gray-300">
+              <div>
+                <span className="font-medium">Tables:</span> {nodes.length} |{' '}
+                <span className="font-medium">Relationships:</span> {edges.length}
+              </div>
+              <div className="text-xs">
+                Tip: Drag nodes to rearrange, scroll to zoom, click and drag background to pan
+              </div>
+            </div>
           </div>
         </div>
       </div>
