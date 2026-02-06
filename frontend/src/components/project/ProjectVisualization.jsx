@@ -505,7 +505,7 @@ export default function ProjectVisualization() {
         </div>
         <div className="flex items-center gap-3">
           {/* Runtime Flow Analysis Button */}
-          {activeView === 'flow' && project?.language === 'python' && (
+          {activeView === 'flow' && (
             <button
               onClick={handleAnalyzeRuntimeFlow}
               disabled={isAnalyzing}
