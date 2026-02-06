@@ -85,6 +85,10 @@ export const getLayoutedElements = (nodes, edges, direction = 'TB') => {
   const dagreGraph = new dagre.graphlib.Graph();
   dagreGraph.setDefaultEdgeLabel(() => ({}));
 
+  // Separate sticky notes from table nodes
+  const stickyNotes = nodes.filter(n => n.type === 'stickyNote');
+  const tableNodes = nodes.filter(n => n.type !== 'stickyNote');
+
   // Configure layout
   dagreGraph.setGraph({
     rankdir: direction,
@@ -94,11 +98,11 @@ export const getLayoutedElements = (nodes, edges, direction = 'TB') => {
     marginy: 50,
   });
 
-  // Detect circular edges
-  const circularEdgeIds = detectCircularEdges(edges, nodes);
+  // Detect circular edges (only for table nodes)
+  const circularEdgeIds = detectCircularEdges(edges, tableNodes);
 
-  // Add nodes to dagre graph with estimated dimensions
-  nodes.forEach((node) => {
+  // Add only table nodes to dagre graph with estimated dimensions
+  tableNodes.forEach((node) => {
     const height = estimateNodeHeight(node);
     const width = node.style?.width || 220;
 
@@ -115,8 +119,8 @@ export const getLayoutedElements = (nodes, edges, direction = 'TB') => {
   // Run layout algorithm
   dagre.layout(dagreGraph);
 
-  // Apply layout to nodes
-  const layoutedNodes = nodes.map((node) => {
+  // Apply layout to table nodes only
+  const layoutedTableNodes = tableNodes.map((node) => {
     const nodeWithPosition = dagreGraph.node(node.id);
     const height = estimateNodeHeight(node);
     const width = node.style?.width || 220;
@@ -129,6 +133,9 @@ export const getLayoutedElements = (nodes, edges, direction = 'TB') => {
       },
     };
   });
+
+  // Combine layouted table nodes with unchanged sticky notes
+  const layoutedNodes = [...layoutedTableNodes, ...stickyNotes];
 
   // Process edges - mark circular ones with dashed style
   const processedEdges = edges.map((edge) => {
@@ -150,17 +157,30 @@ export const getLayoutedElements = (nodes, edges, direction = 'TB') => {
 };
 
 /**
- * Serialize node positions to save to database
+ * Serialize node positions and sticky notes to save to database
  * @param {Array} nodes - ReactFlow nodes
  * @returns {Object} Layout data object
  */
 export const serializeLayout = (nodes) => {
   return {
     version: '1.0',
-    nodes: nodes.map(n => ({
-      id: n.id,
-      position: n.position
-    })),
+    nodes: nodes.map(n => {
+      const nodeData = {
+        id: n.id,
+        position: n.position
+      };
+
+      // For sticky notes, save the full data
+      if (n.type === 'stickyNote') {
+        nodeData.type = 'stickyNote';
+        nodeData.data = {
+          text: n.data.text,
+          color: n.data.color
+        };
+      }
+
+      return nodeData;
+    }),
     layoutMetadata: {
       lastSaved: new Date().toISOString()
     }

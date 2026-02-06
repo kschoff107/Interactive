@@ -254,7 +254,29 @@ export default function ProjectVisualization() {
     // Apply saved layout positions
     const layoutedNodes = applySavedLayout(newNodes, savedLayout);
 
-    setNodes(layoutedNodes);
+    // Restore sticky notes from saved layout
+    const stickyNotes = [];
+    if (savedLayout && savedLayout.nodes) {
+      savedLayout.nodes.forEach((savedNode) => {
+        if (savedNode.type === 'stickyNote') {
+          stickyNotes.push({
+            id: savedNode.id,
+            type: 'stickyNote',
+            position: savedNode.position,
+            data: {
+              id: savedNode.id,
+              text: savedNode.data.text || '',
+              color: savedNode.data.color || 'yellow',
+              onTextChange: handleNoteTextChange,
+              onColorChange: handleNoteColorChange,
+              onDelete: handleDeleteNote,
+            },
+          });
+        }
+      });
+    }
+
+    setNodes([...layoutedNodes, ...stickyNotes]);
     setEdges(newEdges);
   };
 
