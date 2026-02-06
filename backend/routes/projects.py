@@ -80,9 +80,6 @@ def delete_project(project_id):
 @jwt_required()
 def list_projects():
     """List all projects for current user"""
-    from flask import request
-    print(f"DEBUG: Headers = {dict(request.headers)}")
-    print(f"DEBUG: Authorization = {request.headers.get('Authorization')}")
     user_id = int(get_jwt_identity())  # Convert from string to int
 
     with get_connection() as conn:
@@ -99,53 +96,34 @@ def list_projects():
 @jwt_required()
 def create_project():
     """Create a new project"""
-    import sys
-    from flask import request
-    try:
-        print(f"DEBUG: create_project called", file=sys.stderr)
-        user_id = int(get_jwt_identity())
-        print(f"DEBUG: user_id = {user_id}", file=sys.stderr)
-        data = request.get_json()
-        print(f"DEBUG: data = {data}", file=sys.stderr)
+    user_id = int(get_jwt_identity())
+    data = request.get_json()
 
-        name = data.get('name')
-        description = data.get('description', '')
+    name = data.get('name')
+    description = data.get('description', '')
 
-        if not name:
-            return jsonify({'error': 'Project name is required'}), 400
+    if not name:
+        return jsonify({'error': 'Project name is required'}), 400
 
-        print(f"DEBUG: About to get connection", file=sys.stderr)
-        with get_connection() as conn:
-            print(f"DEBUG: Got connection", file=sys.stderr)
-            cur = conn.cursor()
+    with get_connection() as conn:
+        cur = conn.cursor()
 
-            # Create project (initially without source)
-            print(f"DEBUG: About to insert project", file=sys.stderr)
-            cur.execute(
-                '''INSERT INTO projects (user_id, name, description, source_type)
-                   VALUES (%s, %s, %s, %s) RETURNING id''',
-                (user_id, name, description, 'upload')
-            )
-            result = cur.fetchone()
-            project_id = result['id']
-            print(f"DEBUG: Inserted project with id={project_id}", file=sys.stderr)
+        # Create project (initially without source)
+        cur.execute(
+            '''INSERT INTO projects (user_id, name, description, source_type)
+               VALUES (%s, %s, %s, %s) RETURNING id''',
+            (user_id, name, description, 'upload')
+        )
+        result = cur.fetchone()
+        project_id = result['id']
 
-            # Get created project
-            print(f"DEBUG: About to fetch project", file=sys.stderr)
-            cur.execute('SELECT * FROM projects WHERE id = %s', (project_id,))
-            project_data = cur.fetchone()
-            print(f"DEBUG: Fetched project_data = {project_data}", file=sys.stderr)
+        # Get created project
+        cur.execute('SELECT * FROM projects WHERE id = %s', (project_id,))
+        project_data = cur.fetchone()
 
-        print(f"DEBUG: About to create Project object", file=sys.stderr)
-        project = Project(**project_data)
-        print(f"DEBUG: Created Project object", file=sys.stderr)
+    project = Project(**project_data)
 
-        return jsonify({'project': project.to_dict()}), 201
-    except Exception as e:
-        print(f"DEBUG ERROR in create_project: {e}", file=sys.stderr)
-        import traceback
-        traceback.print_exc(file=sys.stderr)
-        raise
+    return jsonify({'project': project.to_dict()}), 201
 
 @projects_bp.route('/<int:project_id>', methods=['GET'])
 @jwt_required()
