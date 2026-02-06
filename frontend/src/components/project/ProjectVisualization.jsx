@@ -14,6 +14,12 @@ import api, { projectsAPI } from '../../services/api';
 import { toast } from 'react-toastify';
 import { useTheme } from '../../context/ThemeContext';
 import { getLayoutedElements, serializeLayout, applySavedLayout } from '../../utils/layoutUtils';
+import StickyNote from './StickyNote';
+
+// Register custom node types
+const nodeTypes = {
+  stickyNote: StickyNote,
+};
 
 export default function ProjectVisualization() {
   const { projectId } = useParams();
@@ -340,6 +346,61 @@ export default function ProjectVisualization() {
     }
   };
 
+  // Sticky Note handlers
+  const handleAddNote = () => {
+    const newNote = {
+      id: `note-${Date.now()}`,
+      type: 'stickyNote',
+      position: { x: 250, y: 150 },
+      data: {
+        id: `note-${Date.now()}`,
+        text: '',
+        color: 'yellow',
+        onTextChange: handleNoteTextChange,
+        onColorChange: handleNoteColorChange,
+        onDelete: handleDeleteNote,
+      },
+    };
+    setNodes((nds) => [...nds, newNote]);
+    setHasUnsavedChanges(true);
+  };
+
+  const handleNoteTextChange = (noteId, newText) => {
+    setNodes((nds) =>
+      nds.map((node) => {
+        if (node.id === noteId) {
+          return {
+            ...node,
+            data: { ...node.data, text: newText },
+          };
+        }
+        return node;
+      })
+    );
+    setHasUnsavedChanges(true);
+  };
+
+  const handleNoteColorChange = (noteId, newColor) => {
+    setNodes((nds) =>
+      nds.map((node) => {
+        if (node.id === noteId) {
+          return {
+            ...node,
+            data: { ...node.data, color: newColor },
+          };
+        }
+        return node;
+      })
+    );
+    setHasUnsavedChanges(true);
+  };
+
+  const handleDeleteNote = (noteId) => {
+    setNodes((nds) => nds.filter((node) => node.id !== noteId));
+    setHasUnsavedChanges(true);
+    toast.success('Note deleted');
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
@@ -475,8 +536,17 @@ export default function ProjectVisualization() {
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
           fitView
+          nodeTypes={nodeTypes}
         >
           <Controls>
+            <ControlButton
+              onClick={handleAddNote}
+              title="Add Sticky Note"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+              </svg>
+            </ControlButton>
             <ControlButton
               onClick={toggleTheme}
               title={isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
