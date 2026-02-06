@@ -231,6 +231,84 @@ def upload_project_files(project_id):
             return jsonify({'error': f'Analysis failed: {str(e)}'}), 500
 
 # GET /api/projects/<project_id>/layout
+@projects_bp.route('/<int:project_id>/analyze/runtime-flow', methods=['POST'])
+@jwt_required()
+def analyze_runtime_flow(project_id):
+    """Analyze Python code for runtime flow visualization"""
+    user_id = int(get_jwt_identity())
+
+    with get_connection() as conn:
+        cur = conn.cursor()
+
+        # Verify project ownership
+        cur.execute('SELECT * FROM projects WHERE id = %s AND user_id = %s', (project_id, user_id))
+        project_data = cur.fetchone()
+
+        if not project_data:
+            return jsonify({'error': 'Project not found'}), 404
+
+        # Check if project has files uploaded
+        file_path = project_data.get('file_path')
+        if not file_path or not os.path.exists(file_path):
+            return jsonify({'error': 'Project files not found. Please upload project files first.'}), 400
+
+        try:
+            # Parse runtime flow
+            manager = ParserManager()
+            flow_data = manager.parse_runtime_flow(file_path)
+
+            # Save analysis result
+            cur.execute(
+                '''INSERT INTO analysis_results (project_id, analysis_type, result_data)
+                   VALUES (%s, %s, %s)''',
+                (project_id, 'runtime_flow', json.dumps(flow_data))
+            )
+
+            return jsonify({
+                'message': 'Runtime flow analysis completed',
+                'flow': flow_data
+            }), 200
+
+        except UnsupportedFrameworkError as e:
+            return jsonify({'error': str(e)}), 400
+        except Exception as e:
+            conn.rollback()
+            return jsonify({'error': f'Runtime flow analysis failed: {str(e)}'}), 500
+
+@projects_bp.route('/<int:project_id>/runtime-flow', methods=['GET'])
+@jwt_required()
+def get_runtime_flow(project_id):
+    """Get cached runtime flow analysis results"""
+    user_id = int(get_jwt_identity())
+
+    with get_connection() as conn:
+        cur = conn.cursor()
+
+        # Verify project ownership
+        cur.execute('SELECT * FROM projects WHERE id = %s AND user_id = %s', (project_id, user_id))
+        project_data = cur.fetchone()
+
+        if not project_data:
+            return jsonify({'error': 'Project not found'}), 404
+
+        # Get latest runtime_flow analysis result
+        cur.execute(
+            '''SELECT * FROM analysis_results
+               WHERE project_id = %s AND analysis_type = %s
+               ORDER BY created_at DESC LIMIT 1''',
+            (project_id, 'runtime_flow')
+        )
+        analysis_data = cur.fetchone()
+
+    if not analysis_data:
+        return jsonify({'error': 'No runtime flow analysis found. Please analyze the project first.'}), 404
+
+    return jsonify({
+        'analysis_id': analysis_data['id'],
+        'flow': json.loads(analysis_data['result_data']),
+        'created_at': analysis_data['created_at']
+    }), 200
+
 @projects_bp.route('/<int:project_id>/layout', methods=['GET'])
 @jwt_required()
 def get_workspace_layout(project_id):

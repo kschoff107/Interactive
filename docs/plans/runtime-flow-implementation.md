@@ -13,16 +13,20 @@
 - **Testing:** Verified with sample Flask app, all features working
 - **Details:** See Phase 1 section below
 
-### 🔄 Phase 2: Backend API (NEXT)
-- **Status:** TODO - Start next session
+### ✅ Phase 2: Backend API (COMPLETE)
+- **Status:** COMPLETE (February 6, 2026)
+- **Completed:** February 6, 2026
 - **Tasks:**
-  - Add REST API endpoints to `backend/routes/projects.py`
-  - Store runtime flow analysis in database
-  - Error handling and validation
-- **Estimated Time:** 1 week
+  - ✅ Add REST API endpoints to `backend/routes/projects.py`
+  - ✅ Store runtime flow analysis in database
+  - ✅ Error handling and validation
+- **Files Modified:**
+  - `backend/routes/projects.py` - Added two new endpoints
+- **Testing:** All 8 unit tests passing
 
-### ⏳ Phase 3: Frontend Visualization (PENDING)
-- **Status:** TODO
+### 🔄 Phase 3: Frontend Visualization (NEXT)
+- **Status:** TODO - Start next session
+- **Priority:** HIGH
 
 ### ⏳ Phase 4: Integration (PENDING)
 - **Status:** TODO
@@ -141,24 +145,46 @@ Add Runtime Flow visualization to the Code Visualizer application, enabling user
 - Correctly identifies: async functions, decorators, entry points
 - Calculates: complexity, call depth, circular dependencies
 
-### Phase 2: Backend API 🔄 NEXT
-**Status**: TODO - Start next session
+### Phase 2: Backend API ✅ COMPLETE
+**Status**: COMPLETE (February 6, 2026)
 **Priority**: HIGH
 **Goal**: Add API endpoints for flow analysis
 
 **Tasks**:
-1. Add analysis endpoint in `backend/routes/projects.py`
-   - `POST /api/projects/<id>/analyze/runtime-flow`
-   - Trigger RuntimeFlowParser
-   - Store results in `analysis_results` table
+1. ✅ Add analysis endpoint in `backend/routes/projects.py`
+   - ✅ `POST /api/projects/<id>/analyze/runtime-flow`
+   - ✅ Trigger RuntimeFlowParser
+   - ✅ Store results in `analysis_results` table with `analysis_type='runtime_flow'`
+   - ✅ Error handling for missing files and unsupported frameworks
 
-2. Add retrieval endpoint
-   - `GET /api/projects/<id>/runtime-flow`
-   - Return cached analysis results
+2. ✅ Add retrieval endpoint
+   - ✅ `GET /api/projects/<id>/runtime-flow`
+   - ✅ Return cached analysis results
+   - ✅ Return 404 if no analysis found
 
-3. Error handling and validation
+3. ✅ Error handling and validation
+   - ✅ Verify project ownership
+   - ✅ Check file path exists
+   - ✅ Handle parser errors gracefully
+   - ✅ Return appropriate HTTP status codes
 
-**Testing**: Integration tests with project upload
+**Implementation Details**:
+- Added `analyze_runtime_flow()` endpoint at line 234 of `backend/routes/projects.py`
+- Added `get_runtime_flow()` endpoint at line 267 of `backend/routes/projects.py`
+- Both endpoints require JWT authentication via `@jwt_required()` decorator
+- Analysis results stored in existing `analysis_results` table
+- Reuses existing `ParserManager.parse_runtime_flow()` method
+
+**Testing**: ✅ Complete - All 8 unit tests passing
+- Created `backend/tests/test_runtime_flow_api.py` with comprehensive test coverage:
+  - ✅ test_analyze_runtime_flow - Happy path analysis
+  - ✅ test_get_runtime_flow - Happy path retrieval
+  - ✅ test_get_runtime_flow_not_analyzed - Error case: no analysis
+  - ✅ test_analyze_runtime_flow_no_files - Error case: no files uploaded
+  - ✅ test_analyze_runtime_flow_unauthorized - Security: missing auth
+  - ✅ test_get_runtime_flow_unauthorized - Security: missing auth
+  - ✅ test_runtime_flow_data_persistence - Data integrity
+  - ✅ test_multiple_analyses - Repeated analysis handling
 
 ### Phase 3: Frontend Visualization (Priority: HIGH)
 **Goal**: Create ReactFlow visualization component
