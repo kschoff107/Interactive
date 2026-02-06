@@ -2,6 +2,7 @@ import os
 from typing import Tuple, Dict
 from .sqlalchemy_parser import SQLAlchemyParser
 from .sqlite_parser import SQLiteParser
+from .runtime_flow_parser import RuntimeFlowParser
 
 class UnsupportedFrameworkError(Exception):
     """Raised when framework is not supported"""
@@ -50,6 +51,16 @@ class ParserManager:
             raise UnsupportedFrameworkError(f"Unsupported framework: {language}/{framework}")
 
         return parser.parse(project_path)
+
+    def parse_runtime_flow(self, project_path: str, options: Dict = None) -> Dict:
+        """Parse Python code to extract runtime flow information"""
+        # Check if project has Python files
+        if not self._has_python_files(project_path):
+            raise UnsupportedFrameworkError("No Python files found in project")
+
+        # Use RuntimeFlowParser
+        parser = RuntimeFlowParser(project_path, options)
+        return parser.parse()
 
     def _create_placeholder_schema(self, project_path: str, language: str, framework: str) -> Dict:
         """Create a placeholder schema for unsupported frameworks"""
