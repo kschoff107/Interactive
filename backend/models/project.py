@@ -15,6 +15,10 @@ class Project:
 
     def to_dict(self):
         """Convert to dictionary"""
+        # Convert datetime objects to ISO format strings for JSON serialization
+        created_at = self.created_at.isoformat() if hasattr(self.created_at, 'isoformat') else self.created_at
+        updated_at = self.updated_at.isoformat() if hasattr(self.updated_at, 'isoformat') else self.updated_at
+
         return {
             'id': self.id,
             'user_id': self.user_id,
@@ -25,6 +29,6 @@ class Project:
             'file_path': self.file_path,
             'language': self.language,
             'framework': self.framework,
-            'created_at': self.created_at,  # SQLite returns timestamps as strings
-            'updated_at': self.updated_at   # SQLite returns timestamps as strings
+            'created_at': created_at,
+            'updated_at': updated_at
         }

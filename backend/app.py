@@ -14,27 +14,32 @@ CORS(app)
 # JWT error handlers
 @jwt.invalid_token_loader
 def invalid_token_callback(error):
-    print(f"JWT INVALID TOKEN: {error}", flush=True)
+    print(f"JWT INVALID TOKEN: {error}")
     return jsonify({'error': 'Invalid token', 'details': str(error)}), 422
 
 @jwt.unauthorized_loader
 def unauthorized_callback(error):
-    print(f"JWT UNAUTHORIZED: {error}", flush=True)
+    print(f"JWT UNAUTHORIZED: {error}")
     return jsonify({'error': 'Missing Authorization header', 'details': str(error)}), 422
 
 @jwt.expired_token_loader
 def expired_token_callback(jwt_header, jwt_payload):
-    print(f"JWT EXPIRED: header={jwt_header}, payload={jwt_payload}", flush=True)
+    print(f"JWT EXPIRED: header={jwt_header}, payload={jwt_payload}")
     return jsonify({'error': 'Token has expired'}), 422
 
 @jwt.revoked_token_loader
 def revoked_token_callback(jwt_header, jwt_payload):
-    print(f"JWT REVOKED: header={jwt_header}, payload={jwt_payload}", flush=True)
+    print(f"JWT REVOKED: header={jwt_header}, payload={jwt_payload}")
     return jsonify({'error': 'Token has been revoked'}), 422
 
 # Error handlers
 @app.errorhandler(Exception)
 def handle_error(error):
+    print(f"ERROR CAUGHT: {error}")
+    print(f"ERROR TYPE: {type(error).__name__}")
+    print(f"ERROR ERRNO: {getattr(error, 'errno', None)}")
+    print("TRACEBACK:")
+    traceback.print_exc()
     return jsonify({
         'error': str(error),
         'error_type': type(error).__name__,
