@@ -32,7 +32,7 @@ def get_analysis(project_id):
         cur = conn.cursor()
 
         # Verify project ownership
-        cur.execute('SELECT * FROM projects WHERE id = ? AND user_id = ?', (project_id, user_id))
+        cur.execute('SELECT * FROM projects WHERE id = %s AND user_id = %s', (project_id, user_id))
         project_data = cur.fetchone()
 
         if not project_data:
@@ -40,7 +40,7 @@ def get_analysis(project_id):
 
         # Get latest analysis result
         cur.execute(
-            'SELECT * FROM analysis_results WHERE project_id = ? ORDER BY created_at DESC LIMIT 1',
+            'SELECT * FROM analysis_results WHERE project_id = %s ORDER BY created_at DESC LIMIT 1',
             (project_id,)
         )
         analysis_data = cur.fetchone()
@@ -65,14 +65,14 @@ def delete_project(project_id):
         cur = conn.cursor()
 
         # Verify project ownership
-        cur.execute('SELECT * FROM projects WHERE id = ? AND user_id = ?', (project_id, user_id))
+        cur.execute('SELECT * FROM projects WHERE id = %s AND user_id = %s', (project_id, user_id))
         project_data = cur.fetchone()
 
         if not project_data:
             return jsonify({'error': 'Project not found'}), 404
 
         # Delete project (cascade will delete related records)
-        cur.execute('DELETE FROM projects WHERE id = ?', (project_id,))
+        cur.execute('DELETE FROM projects WHERE id = %s', (project_id,))
 
     return jsonify({'message': 'Project deleted successfully'}), 200
 
@@ -88,7 +88,7 @@ def list_projects():
     with get_connection() as conn:
         cur = conn.cursor()
 
-        cur.execute('SELECT * FROM projects WHERE user_id = ? ORDER BY created_at DESC', (user_id,))
+        cur.execute('SELECT * FROM projects WHERE user_id = %s ORDER BY created_at DESC', (user_id,))
         projects_data = cur.fetchall()
 
     projects = [Project(**p).to_dict() for p in projects_data]
@@ -123,15 +123,16 @@ def create_project():
             print(f"DEBUG: About to insert project", file=sys.stderr, flush=True)
             cur.execute(
                 '''INSERT INTO projects (user_id, name, description, source_type)
-                   VALUES (?, ?, ?, ?)''',
+                   VALUES (%s, %s, %s, %s) RETURNING id''',
                 (user_id, name, description, 'upload')
             )
-            project_id = cur.lastrowid
+            result = cur.fetchone()
+            project_id = result['id']
             print(f"DEBUG: Inserted project with id={project_id}", file=sys.stderr, flush=True)
 
             # Get created project
             print(f"DEBUG: About to fetch project", file=sys.stderr, flush=True)
-            cur.execute('SELECT * FROM projects WHERE id = ?', (project_id,))
+            cur.execute('SELECT * FROM projects WHERE id = %s', (project_id,))
             project_data = cur.fetchone()
             print(f"DEBUG: Fetched project_data = {project_data}", file=sys.stderr, flush=True)
 
@@ -155,7 +156,7 @@ def get_project(project_id):
     with get_connection() as conn:
         cur = conn.cursor()
 
-        cur.execute('SELECT * FROM projects WHERE id = ? AND user_id = ?', (project_id, user_id))
+        cur.execute('SELECT * FROM projects WHERE id = %s AND user_id = %s', (project_id, user_id))
         project_data = cur.fetchone()
 
     if not project_data:
@@ -175,7 +176,7 @@ def upload_project_files(project_id):
         cur = conn.cursor()
 
         # Verify project ownership
-        cur.execute('SELECT * FROM projects WHERE id = ? AND user_id = ?', (project_id, user_id))
+        cur.execute('SELECT * FROM projects WHERE id = %s AND user_id = %s', (project_id, user_id))
         project_data = cur.fetchone()
 
         if not project_data:
@@ -193,7 +194,7 @@ def upload_project_files(project_id):
                 file.save(os.path.join(upload_dir, filename))
 
         # Update project file_path
-        cur.execute('UPDATE projects SET file_path = ? WHERE id = ?', (upload_dir, project_id))
+        cur.execute('UPDATE projects SET file_path = %s WHERE id = %s', (upload_dir, project_id))
 
         # Detect and analyze
         try:
@@ -202,7 +203,7 @@ def upload_project_files(project_id):
 
             # Update project with detected info
             cur.execute(
-                'UPDATE projects SET language = ?, framework = ? WHERE id = ?',
+                'UPDATE projects SET language = %s, framework = %s WHERE id = %s',
                 (language, framework, project_id)
             )
 
@@ -212,7 +213,7 @@ def upload_project_files(project_id):
             # Save analysis result
             cur.execute(
                 '''INSERT INTO analysis_results (project_id, analysis_type, result_data)
-                   VALUES (?, ?, ?)''',
+                   VALUES (%s, %s, %s)''',
                 (project_id, 'database_schema', json.dumps(schema))
             )
 
@@ -240,7 +241,7 @@ def get_workspace_layout(project_id):
         cur = conn.cursor()
 
         # Verify project ownership
-        cur.execute('SELECT * FROM projects WHERE id = ? AND user_id = ?',
+        cur.execute('SELECT * FROM projects WHERE id = %s AND user_id = %s',
                    (project_id, user_id))
         if not cur.fetchone():
             return jsonify({'error': 'Project not found'}), 404
@@ -248,7 +249,7 @@ def get_workspace_layout(project_id):
         # Get layout for database_schema analysis type
         cur.execute(
             '''SELECT * FROM workspace_layouts
-               WHERE project_id = ? AND analysis_type = ?
+               WHERE project_id = %s AND analysis_type = %s
                ORDER BY updated_at DESC LIMIT 1''',
             (project_id, 'database_schema')
         )
@@ -282,7 +283,7 @@ def save_workspace_layout(project_id):
         cur = conn.cursor()
 
         # Verify project ownership
-        cur.execute('SELECT * FROM projects WHERE id = ? AND user_id = ?',
+        cur.execute('SELECT * FROM projects WHERE id = %s AND user_id = %s',
                    (project_id, user_id))
         if not cur.fetchone():
             return jsonify({'error': 'Project not found'}), 404
@@ -291,7 +292,7 @@ def save_workspace_layout(project_id):
 
         # Check if layout exists
         cur.execute(
-            'SELECT id FROM workspace_layouts WHERE project_id = ? AND analysis_type = ?',
+            'SELECT id FROM workspace_layouts WHERE project_id = %s AND analysis_type = %s',
             (project_id, analysis_type)
         )
         existing = cur.fetchone()
@@ -300,8 +301,8 @@ def save_workspace_layout(project_id):
             # Update
             cur.execute(
                 '''UPDATE workspace_layouts
-                   SET layout_data = ?, updated_at = CURRENT_TIMESTAMP
-                   WHERE id = ?''',
+                   SET layout_data = %s, updated_at = CURRENT_TIMESTAMP
+                   WHERE id = %s''',
                 (json.dumps(layout_data), existing['id'])
             )
             layout_id = existing['id']
@@ -309,10 +310,11 @@ def save_workspace_layout(project_id):
             # Create
             cur.execute(
                 '''INSERT INTO workspace_layouts (project_id, analysis_type, layout_data)
-                   VALUES (?, ?, ?)''',
+                   VALUES (%s, %s, %s) RETURNING id''',
                 (project_id, analysis_type, json.dumps(layout_data))
             )
-            layout_id = cur.lastrowid
+            result = cur.fetchone()
+            layout_id = result['id']
 
     return jsonify({
         'message': 'Layout saved successfully',

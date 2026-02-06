@@ -21,20 +21,21 @@ def register():
         cur = conn.cursor()
 
         # Check if user exists
-        cur.execute('SELECT id FROM users WHERE username = ? OR email = ?', (username, email))
+        cur.execute('SELECT id FROM users WHERE username = %s OR email = %s', (username, email))
         if cur.fetchone():
             return jsonify({'error': 'User already exists'}), 409
 
         # Create user
         password_hash = User.hash_password(password)
         cur.execute(
-            'INSERT INTO users (username, email, password_hash) VALUES (?, ?, ?)',
+            'INSERT INTO users (username, email, password_hash) VALUES (%s, %s, %s) RETURNING id',
             (username, email, password_hash)
         )
-        user_id = cur.lastrowid
+        result = cur.fetchone()
+        user_id = result['id']
 
         # Get created_at timestamp
-        cur.execute('SELECT created_at FROM users WHERE id = ?', (user_id,))
+        cur.execute('SELECT created_at FROM users WHERE id = %s', (user_id,))
         result = cur.fetchone()
         created_at = result['created_at']
 
@@ -62,7 +63,7 @@ def login():
     with get_connection() as conn:
         cur = conn.cursor()
 
-        cur.execute('SELECT * FROM users WHERE username = ?', (username,))
+        cur.execute('SELECT * FROM users WHERE username = %s', (username,))
         user_data = cur.fetchone()
 
     if not user_data:
