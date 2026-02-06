@@ -16,6 +16,7 @@ import { useTheme } from '../../context/ThemeContext';
 import { getLayoutedElements, serializeLayout, applySavedLayout } from '../../utils/layoutUtils';
 import StickyNote from './StickyNote';
 import Sidebar from './Sidebar';
+import FlowVisualization from './FlowVisualization';
 
 // Register custom node types
 const nodeTypes = {
@@ -33,6 +34,11 @@ export default function ProjectVisualization() {
 
   // View state
   const [activeView, setActiveView] = useState('schema');
+
+  // Runtime flow state
+  const [runtimeFlowData, setRuntimeFlowData] = useState(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [flowLoading, setFlowLoading] = useState(false);
 
   // Layout state
   const [previousLayout, setPreviousLayout] = useState(null);
@@ -63,6 +69,13 @@ export default function ProjectVisualization() {
   useEffect(() => {
     loadProjectAndVisualization();
   }, [projectId]);
+
+  // Load runtime flow data when switching to flow view
+  useEffect(() => {
+    if (activeView === 'flow' && !runtimeFlowData && project) {
+      loadRuntimeFlowData();
+    }
+  }, [activeView, project]);
 
   const loadProjectAndVisualization = async () => {
     try {
@@ -427,6 +440,40 @@ export default function ProjectVisualization() {
     toast.success('Note deleted');
   };
 
+  const loadRuntimeFlowData = async () => {
+    if (flowLoading) return;
+
+    setFlowLoading(true);
+    try {
+      const response = await api.get(`/projects/${projectId}/runtime-flow`);
+      setRuntimeFlowData(response.data.flow);
+    } catch (error) {
+      if (error.response?.status === 404) {
+        // No analysis exists yet - this is expected
+        console.log('No runtime flow analysis found');
+      } else {
+        console.error('Failed to load runtime flow:', error);
+      }
+    } finally {
+      setFlowLoading(false);
+    }
+  };
+
+  const handleAnalyzeRuntimeFlow = async () => {
+    setIsAnalyzing(true);
+    try {
+      const response = await api.post(`/projects/${projectId}/analyze/runtime-flow`);
+      setRuntimeFlowData(response.data.flow);
+      toast.success('Runtime flow analysis completed');
+    } catch (error) {
+      const errorMsg = error.response?.data?.error || 'Failed to analyze runtime flow';
+      toast.error(errorMsg);
+      console.error('Runtime flow analysis error:', error);
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
@@ -457,8 +504,34 @@ export default function ProjectVisualization() {
           </div>
         </div>
         <div className="flex items-center gap-3">
-          {/* Layout Controls */}
-          {nodes.length > 0 && (
+          {/* Runtime Flow Analysis Button */}
+          {activeView === 'flow' && project?.language === 'python' && (
+            <button
+              onClick={handleAnalyzeRuntimeFlow}
+              disabled={isAnalyzing}
+              className="px-4 py-2 bg-purple-600 dark:bg-purple-700 text-white rounded hover:bg-purple-700 dark:hover:bg-purple-800 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            >
+              {isAnalyzing ? (
+                <>
+                  <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                  Analyzing...
+                </>
+              ) : (
+                <>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                  Analyze Runtime Flow
+                </>
+              )}
+            </button>
+          )}
+
+          {/* Layout Controls - Only show for schema view */}
+          {activeView === 'schema' && nodes.length > 0 && (
             <>
               <button
                 onClick={handleQuickOrganize}
@@ -540,83 +613,109 @@ export default function ProjectVisualization() {
         <div className="flex-1 flex flex-col">
           {/* Visualization */}
           <div className="flex-1 relative">
-        <style>{`
-          .react-flow__node {
-            --node-bg: ${isDark ? '#1f2937' : '#ffffff'};
-            --node-text: ${isDark ? '#f3f4f6' : '#111827'};
-          }
-          .react-flow__background {
-            background-color: ${isDark ? '#111827' : '#f9fafb'};
-          }
-          .react-flow__edge-path {
-            stroke: ${isDark ? '#6b7280' : '#9ca3af'};
-          }
-          .react-flow__minimap {
-            background-color: ${isDark ? '#1f2937' : '#ffffff'};
-          }
-          .react-flow__controls {
-            background-color: ${isDark ? '#1f2937' : '#ffffff'};
-            border: 1px solid ${isDark ? '#374151' : '#e5e7eb'};
-          }
-          .react-flow__controls-button {
-            background-color: ${isDark ? '#1f2937' : '#ffffff'};
-            color: ${isDark ? '#f3f4f6' : '#111827'};
-            border-bottom: 1px solid ${isDark ? '#374151' : '#e5e7eb'};
-          }
-          .react-flow__controls-button:hover {
-            background-color: ${isDark ? '#374151' : '#f3f4f6'};
-          }
-        `}</style>
-        <ReactFlow
-          nodes={nodes}
-          edges={edges}
-          onNodesChange={handleNodesChange}
-          onEdgesChange={onEdgesChange}
-          onConnect={onConnect}
-          fitView
-          nodeTypes={nodeTypes}
-        >
-          <Controls>
-            <ControlButton
-              onClick={handleAddNote}
-              title="Add Sticky Note"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-              </svg>
-            </ControlButton>
-            <ControlButton
-              onClick={toggleTheme}
-              title={isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
-            >
-              {isDark ? (
-                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z" clipRule="evenodd" />
-                </svg>
-              ) : (
-                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                  <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z" />
-                </svg>
-              )}
-            </ControlButton>
-          </Controls>
-          <MiniMap />
-          <Background variant="dots" gap={12} size={1} />
-        </ReactFlow>
-      </div>
+            {activeView === 'schema' && (
+              <>
+                <style>{`
+                  .react-flow__node {
+                    --node-bg: ${isDark ? '#1f2937' : '#ffffff'};
+                    --node-text: ${isDark ? '#f3f4f6' : '#111827'};
+                  }
+                  .react-flow__background {
+                    background-color: ${isDark ? '#111827' : '#f9fafb'};
+                  }
+                  .react-flow__edge-path {
+                    stroke: ${isDark ? '#6b7280' : '#9ca3af'};
+                  }
+                  .react-flow__minimap {
+                    background-color: ${isDark ? '#1f2937' : '#ffffff'};
+                  }
+                  .react-flow__controls {
+                    background-color: ${isDark ? '#1f2937' : '#ffffff'};
+                    border: 1px solid ${isDark ? '#374151' : '#e5e7eb'};
+                  }
+                  .react-flow__controls-button {
+                    background-color: ${isDark ? '#1f2937' : '#ffffff'};
+                    color: ${isDark ? '#f3f4f6' : '#111827'};
+                    border-bottom: 1px solid ${isDark ? '#374151' : '#e5e7eb'};
+                  }
+                  .react-flow__controls-button:hover {
+                    background-color: ${isDark ? '#374151' : '#f3f4f6'};
+                  }
+                `}</style>
+                <ReactFlow
+                  nodes={nodes}
+                  edges={edges}
+                  onNodesChange={handleNodesChange}
+                  onEdgesChange={onEdgesChange}
+                  onConnect={onConnect}
+                  fitView
+                  nodeTypes={nodeTypes}
+                >
+                  <Controls>
+                    <ControlButton
+                      onClick={handleAddNote}
+                      title="Add Sticky Note"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                      </svg>
+                    </ControlButton>
+                    <ControlButton
+                      onClick={toggleTheme}
+                      title={isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+                    >
+                      {isDark ? (
+                        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z" clipRule="evenodd" />
+                        </svg>
+                      ) : (
+                        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                          <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z" />
+                        </svg>
+                      )}
+                    </ControlButton>
+                  </Controls>
+                  <MiniMap />
+                  <Background variant="dots" gap={12} size={1} />
+                </ReactFlow>
+              </>
+            )}
+
+            {activeView === 'flow' && (
+              <FlowVisualization flowData={runtimeFlowData} isDark={isDark} />
+            )}
+
+            {activeView !== 'schema' && activeView !== 'flow' && (
+              <div className="flex items-center justify-center h-full">
+                <div className="text-center">
+                  <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                  </svg>
+                  <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-gray-100">
+                    Coming Soon
+                  </h3>
+                  <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                    This visualization type is under development
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
 
           {/* Info Panel */}
-          <div className="bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 px-6 py-3">
-            <div className="flex items-center justify-between text-sm text-gray-600 dark:text-gray-300">
-              <div>
-                <span className="font-medium">Tables:</span> {nodes.length} |{' '}
-                <span className="font-medium">Relationships:</span> {edges.length}
-              </div>
-              <div className="text-xs">
-                Tip: Drag nodes to rearrange, scroll to zoom, click and drag background to pan
+          {activeView === 'schema' && (
+            <div className="bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 px-6 py-3">
+              <div className="flex items-center justify-between text-sm text-gray-600 dark:text-gray-300">
+                <div>
+                  <span className="font-medium">Tables:</span> {nodes.length} |{' '}
+                  <span className="font-medium">Relationships:</span> {edges.length}
+                </div>
+                <div className="text-xs">
+                  Tip: Drag nodes to rearrange, scroll to zoom, click and drag background to pan
+                </div>
               </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
     </div>
