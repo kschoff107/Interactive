@@ -1,8 +1,70 @@
 # Code Visualizer - Design Document
 
-**Date:** February 4, 2026
+**Date:** February 4, 2026 (Updated: February 6, 2026)
 **Project:** Visual Backend Code Analyzer
 **Architecture:** Monolithic Flask App with Modular Parsers
+**Status:** MVP Deployed on Render
+
+## Current Implementation Status
+
+### ✅ Implemented Features
+
+**Backend (Python/Flask):**
+- ✅ Flask application with JWT authentication
+- ✅ PostgreSQL database with all tables (users, projects, analysis_results, workspace_layouts, workspace_notes)
+- ✅ SQLite support for local development
+- ✅ Database abstraction layer supporting both SQLite and PostgreSQL
+- ✅ User registration and login
+- ✅ Project CRUD operations
+- ✅ File upload functionality
+- ✅ Parser Manager with framework detection
+- ✅ SQLAlchemy parser for Python projects
+
+**Frontend (React):**
+- ✅ Authentication pages (Login/Register)
+- ✅ Dashboard with project cards
+- ✅ Project visualization workspace with React Flow
+- ✅ Light/Dark mode toggle (Dashboard and Workspace)
+- ✅ Sticky notes functionality
+- ✅ Workspace layout persistence
+- ✅ Theme persistence (localStorage)
+- ✅ Responsive design with Tailwind CSS
+- ✅ Toast notifications
+
+**Deployment:**
+- ✅ Deployed on Render (https://interactive-frontend.onrender.com)
+- ✅ Backend API running on Render with PostgreSQL
+- ✅ Frontend static site on Render
+- ✅ Auto-deploy from `qual` branch
+- ✅ Environment variables configured
+- ✅ Database initialization on deployment
+
+**Theme System:**
+- ✅ ThemeContext with React Context API
+- ✅ Persistent theme preference (localStorage)
+- ✅ Light/Dark mode toggle button (bottom left on both pages)
+- ✅ Full dark mode support across all components
+- ✅ Tailwind CSS dark: prefix classes
+
+### 🚧 In Progress / Planned
+
+- ⏳ Git repository cloning
+- ⏳ Additional language parsers (TypeScript, JavaScript)
+- ⏳ API Routes visualization
+- ⏳ Export functionality (PNG, SVG, PDF)
+- ⏳ Advanced filtering and search
+- ⏳ Auto-layout algorithm
+
+### 📊 Current Architecture
+
+**Production URLs:**
+- Frontend: https://interactive-frontend.onrender.com
+- Backend API: https://interactive-qual.onrender.com/api
+- Database: PostgreSQL on Render
+
+**Git Branches:**
+- `master` - Main development branch (includes theme toggle)
+- `qual` - Production deployment branch (Render deploys from here)
 
 ## Overview
 
@@ -335,27 +397,19 @@ src/
 │   ├── auth/
 │   │   ├── Login.jsx
 │   │   └── Register.jsx
-│   ├── layout/
-│   │   ├── Sidebar.jsx
-│   │   ├── Header.jsx
-│   │   └── Layout.jsx
 │   ├── dashboard/
-│   │   ├── Dashboard.jsx
-│   │   └── ProjectCard.jsx
+│   │   └── Dashboard.jsx          # ✅ Implemented with dark mode
 │   ├── project/
-│   │   ├── NewProject.jsx
-│   │   ├── ProjectDetail.jsx
-│   │   └── ExportMenu.jsx
-│   └── visualization/
-│       ├── DatabaseSchema.jsx
-│       ├── TableNode.jsx
-│       ├── RelationshipEdge.jsx
-│       └── StickyNote.jsx
+│   │   ├── ProjectUpload.jsx      # ✅ File upload UI
+│   │   └── ProjectVisualization.jsx # ✅ React Flow workspace
+│   └── common/
+│       └── ProtectedRoute.jsx     # ✅ Auth guard
 ├── services/
-│   └── api.js
+│   └── api.js                     # ✅ Axios instance with JWT
 ├── context/
-│   └── AuthContext.jsx
-└── App.jsx
+│   ├── AuthContext.jsx            # ✅ User auth state
+│   └── ThemeContext.jsx           # ✅ Light/Dark mode state
+└── App.jsx                        # ✅ Main routing
 ```
 
 **Visualization Library: React Flow**
@@ -401,6 +455,62 @@ Chosen for:
 - FK indicator (link icon)
 - Click to highlight related tables
 - Double-click for detailed view modal
+
+**Theme System (Implemented):**
+
+The application supports light and dark modes with persistent user preference.
+
+**ThemeContext Structure:**
+```javascript
+// src/context/ThemeContext.jsx
+export const ThemeProvider = ({ children }) => {
+  const [isDark, setIsDark] = useState(() => {
+    const saved = localStorage.getItem('theme');
+    return saved === 'dark';
+  });
+
+  useEffect(() => {
+    if (isDark) {
+      document.documentElement.classList.add('dark');
+      localStorage.setItem('theme', 'dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+      localStorage.setItem('theme', 'light');
+    }
+  }, [isDark]);
+
+  const toggleTheme = () => setIsDark(!isDark);
+
+  return (
+    <ThemeContext.Provider value={{ isDark, toggleTheme }}>
+      {children}
+    </ThemeContext.Provider>
+  );
+};
+```
+
+**Theme Toggle Button:**
+- **Location:** Bottom left corner (fixed position)
+- **Icon:** Sun (light mode) / Moon (dark mode)
+- **Styling:** White/gray-800 background with shadow
+- **Behavior:** Toggles theme and saves to localStorage
+- **Pages:** Dashboard and ProjectVisualization workspace
+
+**Dark Mode Implementation:**
+- **Tailwind CSS:** Uses `dark:` prefix classes
+- **CSS Variables:** For ReactFlow nodes and edges
+- **Components:** All components support dark mode
+- **Colors:**
+  - Light: gray-50 background, gray-900 text
+  - Dark: gray-900 background, white text
+
+**Example Dark Mode Classes:**
+```jsx
+<div className="bg-white dark:bg-gray-800">
+  <h1 className="text-gray-900 dark:text-white">Title</h1>
+  <p className="text-gray-600 dark:text-gray-300">Content</p>
+</div>
+```
 
 ---
 
@@ -604,9 +714,54 @@ test('allows adding sticky notes', () => {
 - React Testing Library (frontend)
 - ESLint + Prettier
 
-**Deployment Options:**
+**Current Deployment (Render):**
 
-### Option 1: Simple VPS (Recommended for MVP)
+### ✅ Production Setup (Currently Deployed)
+**Platform:** Render.com
+- **Backend Service:** `interactive-qual`
+  - Runtime: Python 3
+  - Region: Oregon (US West)
+  - Build Command: `pip install -r requirements.txt && python init_db.py`
+  - Start Command: `gunicorn --bind 0.0.0.0:$PORT app:app`
+  - Root Directory: `backend`
+  - Branch: `qual`
+
+- **Frontend Service:** `interactive-frontend`
+  - Type: Static Site
+  - Region: Global CDN
+  - Build Command: `cd frontend && npm install && npm run build`
+  - Publish Directory: `frontend/build`
+  - Environment: `REACT_APP_API_URL=https://interactive-qual.onrender.com/api`
+
+- **Database:** `interact-db`
+  - Type: PostgreSQL 18
+  - Region: Oregon (US West)
+  - Connection: Internal connection string to backend
+
+**Environment Variables (Backend):**
+```bash
+DATABASE_URL=<PostgreSQL connection string from Render>
+SECRET_KEY=<generated>
+JWT_SECRET_KEY=<generated>
+FLASK_DEBUG=False
+STORAGE_PATH=/opt/render/project/src/storage
+```
+
+**Deployment Flow:**
+1. Push code to `qual` branch on GitHub
+2. Render automatically detects changes
+3. Builds backend and frontend
+4. Runs database initialization
+5. Deploys to production URLs
+
+**Free Tier Limitations:**
+- Services spin down after 15 minutes of inactivity
+- First request after spin-down takes 30-60 seconds
+- Suitable for development and small user base
+
+### Alternative Deployment Options (Future)
+
+### Option 1: Simple VPS
 - DigitalOcean, Linode
 - Nginx reverse proxy
 - Gunicorn for Flask
@@ -615,15 +770,7 @@ test('allows adding sticky notes', () => {
 - Cost: ~$20-40/month
 - Good for 100-1000 users
 
-### Option 2: Cloud Platform (Easiest)
-- Heroku, Railway, Render
-- Git push to deploy
-- Managed PostgreSQL
-- S3 for file storage
-- Cost: ~$25-50/month
-- Zero DevOps required
-
-### Option 3: Containerized (Future)
+### Option 2: Containerized
 - Docker containers
 - Cloud Run/AWS ECS
 - Better for scaling
@@ -697,18 +844,49 @@ code-visualizer/
 
 ---
 
+## Completed Steps
+
+1. ✅ **Setup git worktree** for isolated development
+2. ✅ **Create implementation plan** with detailed tasks
+3. ✅ **Start with backend foundation** (Flask app, database, auth)
+4. ✅ **Build first parser** (SQLAlchemy)
+5. ✅ **Create React frontend** (auth + dashboard)
+6. ✅ **Add visualization workspace** (React Flow integration)
+7. ✅ **Implement sticky notes** and workspace persistence
+8. ✅ **Deploy MVP** to Render
+9. ✅ **Add light/dark mode** toggle
+10. ✅ **PostgreSQL production database** with SQLite dev support
+
 ## Next Steps
 
-1. **Setup git worktree** for isolated development
-2. **Create implementation plan** with detailed tasks
-3. **Start with backend foundation** (Flask app, database, auth)
-4. **Build first parser** (SQLAlchemy)
-5. **Create React frontend** (auth + dashboard)
-6. **Add visualization workspace** (React Flow integration)
-7. **Implement sticky notes** and workspace persistence
-8. **Add export functionality**
-9. **Write tests**
-10. **Deploy MVP**
+1. **Add export functionality** (PNG, SVG, PDF, Markdown)
+2. **Implement Git repository cloning** (currently upload-only)
+3. **Build additional parsers:**
+   - Django ORM parser
+   - Prisma parser (TypeScript)
+   - TypeORM parser
+   - Sequelize parser (JavaScript)
+4. **Add workspace features:**
+   - Table search and filtering
+   - Auto-layout algorithm (dagre)
+   - Context menu (right-click)
+5. **Write comprehensive tests:**
+   - Parser unit tests
+   - API endpoint tests
+   - Component tests
+   - E2E tests
+6. **Performance optimization:**
+   - Handle large codebases
+   - Optimize React Flow rendering
+   - Add pagination for projects
+7. **User experience improvements:**
+   - Better error messages
+   - Loading states
+   - Onboarding tutorial
+8. **Security hardening:**
+   - Rate limiting
+   - File upload sanitization
+   - CORS configuration review
 
 ---
 
