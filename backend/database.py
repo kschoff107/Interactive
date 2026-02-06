@@ -8,51 +8,44 @@ def dict_factory(cursor, row):
     fields = [column[0] for column in cursor.description]
     return {key: value for key, value in zip(fields, row)}
 
-def dict_factory_pg(cursor, row):
-    """Convert PostgreSQL row to dictionary"""
-    if cursor.description is None:
-        return None
-    fields = [column[0] for column in cursor.description]
-    return {key: value for key, value in zip(fields, row)}
+class PostgreSQLConnectionWrapper:
+    """Wrapper to make PostgreSQL connection work like SQLite"""
+    def __init__(self, conn):
+        self._conn = conn
+        self._in_transaction = False
 
-class DictCursorWrapper:
-    """Wrapper to make PostgreSQL cursor return dicts like SQLite"""
-    def __init__(self, cursor):
-        self._cursor = cursor
+    def cursor(self):
+        """Return a RealDictCursor that returns rows as dictionaries"""
+        from psycopg2.extras import RealDictCursor
+        return self._conn.cursor(cursor_factory=RealDictCursor)
 
-    def execute(self, query, params=None):
-        """Execute query and return result"""
-        if params:
-            return self._cursor.execute(query, params)
-        return self._cursor.execute(query)
+    def commit(self):
+        """Commit transaction"""
+        return self._conn.commit()
 
-    def fetchone(self):
-        """Fetch one row as dict"""
-        row = self._cursor.fetchone()
-        if row is None:
-            return None
-        return dict_factory_pg(self._cursor, row)
+    def rollback(self):
+        """Rollback transaction"""
+        return self._conn.rollback()
 
-    def fetchall(self):
-        """Fetch all rows as list of dicts"""
-        rows = self._cursor.fetchall()
-        return [dict_factory_pg(self._cursor, row) for row in rows]
+    def close(self):
+        """Close connection"""
+        return self._conn.close()
 
-    @property
-    def lastrowid(self):
-        """Get last inserted row ID"""
-        # PostgreSQL doesn't have lastrowid like SQLite
-        # This should be handled by RETURNING clause in INSERT
-        return getattr(self._cursor, 'lastrowid', None)
+    def __enter__(self):
+        """Context manager entry"""
+        return self
 
-    @property
-    def rowcount(self):
-        """Get number of affected rows"""
-        return self._cursor.rowcount
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Context manager exit"""
+        if exc_type is not None:
+            self._conn.rollback()
+        else:
+            self._conn.commit()
+        self._conn.close()
 
     def __getattr__(self, name):
-        """Proxy other attributes to underlying cursor"""
-        return getattr(self._cursor, name)
+        """Proxy other attributes to underlying connection"""
+        return getattr(self._conn, name)
 
 @contextmanager
 def get_connection():
@@ -81,21 +74,18 @@ def get_connection():
     # Handle PostgreSQL
     elif db_url.startswith('postgres://') or db_url.startswith('postgresql://'):
         import psycopg2
-        from psycopg2.extras import RealDictCursor
 
         conn = psycopg2.connect(db_url)
-        # Wrap connection to return dict cursor
-        original_cursor = conn.cursor
-        conn.cursor = lambda: DictCursorWrapper(original_cursor(cursor_factory=RealDictCursor))
+        wrapped_conn = PostgreSQLConnectionWrapper(conn)
 
         try:
-            yield conn
-            conn.commit()
+            yield wrapped_conn
+            wrapped_conn.commit()
         except Exception:
-            conn.rollback()
+            wrapped_conn.rollback()
             raise
         finally:
-            conn.close()
+            wrapped_conn.close()
 
     else:
         raise ValueError(f"Unsupported database URL format: {db_url}")
