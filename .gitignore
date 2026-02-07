@@ -12,6 +12,7 @@ backend/storage/
 backend/test_project/
 backend/test_*.py
 backend/test_*.json
+backend/debug_scripts/
 
 # Frontend
 frontend/node_modules/
