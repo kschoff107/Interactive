@@ -275,8 +275,11 @@ def upload_project_files(project_id):
                 try:
                     schema = manager.parse_database_schema(upload_dir, language, framework)
 
-                    # Only save and mark as having schema if actual tables were found
-                    has_tables = schema and schema.get('tables') and len(schema.get('tables', [])) > 0
+                    # Only save and mark as having schema if actual tables were found (excluding placeholders)
+                    tables = schema.get('tables', []) if schema else []
+                    # Filter out placeholder tables like Example_Table
+                    real_tables = [t for t in tables if t.get('name') not in ['Example_Table', 'example_table']]
+                    has_tables = len(real_tables) > 0
 
                     if has_tables:
                         # Save or update analysis result
