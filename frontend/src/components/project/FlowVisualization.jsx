@@ -14,6 +14,7 @@ import FunctionNode from './nodes/FunctionNode';
 import ConditionalNode from './nodes/ConditionalNode';
 import LoopNode from './nodes/LoopNode';
 import TryNode from './nodes/TryNode';
+import InsightGuide from './InsightGuide';
 import { transformFlowData, estimateFlowNodeHeight, getFlowNodeWidth } from '../../utils/flowTransform';
 import { detectCircularEdges } from '../../utils/layoutUtils';
 
@@ -99,6 +100,7 @@ export default function FlowVisualization({ flowData, isDark, onToggleTheme, lay
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const [initialNodes, setInitialNodes] = useState([]);
   const [initialEdges, setInitialEdges] = useState([]);
+  const [showInsightGuide, setShowInsightGuide] = useState(false);
 
   // Transform and layout flow data on initial load
   useEffect(() => {
@@ -197,6 +199,15 @@ export default function FlowVisualization({ flowData, isDark, onToggleTheme, lay
           className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden"
         >
           <ControlButton
+            onClick={() => setShowInsightGuide(true)}
+            title="Learn about this visualization"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"
+                d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </ControlButton>
+          <ControlButton
             onClick={onToggleTheme}
             title={isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
           >
@@ -223,6 +234,21 @@ export default function FlowVisualization({ flowData, isDark, onToggleTheme, lay
           className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg"
           maskColor={isDark ? 'rgb(17, 24, 39, 0.6)' : 'rgb(243, 244, 246, 0.6)'}
         />
+
+        {/* Decode This button - top-left */}
+        <div className="absolute top-4 left-4 z-10">
+          <button
+            onClick={() => setShowInsightGuide(true)}
+            className="bg-purple-600 hover:bg-purple-700 dark:bg-purple-500 dark:hover:bg-purple-600 text-white px-4 py-2 rounded-lg shadow-lg transition-all duration-200 flex items-center gap-2 font-medium text-sm"
+            title="Learn about this visualization"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"
+                d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            🔍 Decode This
+          </button>
+        </div>
 
         {/* Statistics overlay */}
         {statistics && (
@@ -268,6 +294,13 @@ export default function FlowVisualization({ flowData, isDark, onToggleTheme, lay
         )}
 
       </ReactFlow>
+
+      {/* Insight Guide Modal */}
+      <InsightGuide
+        isOpen={showInsightGuide}
+        onClose={() => setShowInsightGuide(false)}
+        isDark={isDark}
+      />
     </div>
   );
 }
