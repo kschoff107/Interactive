@@ -895,6 +895,19 @@ code-visualizer/
 - API Routes visualization
 - Code Structure diagram
 - Runtime Flow visualization
+- **Process Flow visualization** (Business process modeling)
+  - BPMN-style process diagrams
+  - Visual process builder with drag-and-drop
+  - Support for process elements:
+    - Tasks/Activities (rectangles)
+    - Decision points/Gateways (diamonds)
+    - Start/End events (circles)
+    - Swim lanes for actors/systems
+    - Connectors and sequence flows
+  - Process validation and execution path analysis
+  - Map business processes to code implementation
+  - Export to BPMN XML format
+  - Use cases: Document workflows, map business logic to code, process improvement, compliance documentation
 - Private Git repository support (OAuth)
 - Collaborative workspaces (multi-user)
 - Real-time collaboration on diagrams
