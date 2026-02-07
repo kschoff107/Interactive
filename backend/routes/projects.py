@@ -121,6 +121,10 @@ def create_project():
         cur.execute('SELECT * FROM projects WHERE id = %s', (project_id,))
         project_data = cur.fetchone()
 
+    # Debug logging
+    print("DEBUG: project_data keys:", project_data.keys() if hasattr(project_data, 'keys') else 'Not a dict')
+    print("DEBUG: project_data:", project_data)
+
     project = Project(**project_data)
 
     return jsonify({'project': project.to_dict()}), 201
@@ -144,11 +148,61 @@ def get_project(project_id):
 
     return jsonify({'project': project.to_dict()}), 200
 
+@projects_bp.route('/<int:project_id>/status', methods=['GET'])
+@jwt_required()
+def get_project_status(project_id):
+    """Get project file upload status and analysis availability"""
+    user_id = int(get_jwt_identity())
+
+    with get_connection() as conn:
+        cur = conn.cursor()
+
+        # Verify project ownership
+        cur.execute('SELECT * FROM projects WHERE id = %s AND user_id = %s', (project_id, user_id))
+        project_data = cur.fetchone()
+
+        if not project_data:
+            return jsonify({'error': 'Project not found'}), 404
+
+        # Get file counts by analysis type
+        file_path = project_data.get('file_path')
+        file_count = 0
+        if file_path and os.path.exists(file_path):
+            file_count = len([f for f in os.listdir(file_path) if os.path.isfile(os.path.join(file_path, f))])
+
+        # Convert last_upload_date to string if it exists
+        last_upload = project_data.get('last_upload_date')
+        last_upload_str = last_upload.isoformat() if last_upload else None
+
+        return jsonify({
+            'project_id': project_id,
+            'has_database_schema': project_data.get('has_database_schema', False),
+            'has_runtime_flow': project_data.get('has_runtime_flow', False),
+            'last_upload_date': last_upload_str,
+            'file_count': file_count,
+            'available_views': [
+                view for view, available in [
+                    ('database_schema', project_data.get('has_database_schema', False)),
+                    ('runtime_flow', project_data.get('has_runtime_flow', False))
+                ] if available
+            ],
+            'missing_views': [
+                view for view, available in [
+                    ('database_schema', project_data.get('has_database_schema', False)),
+                    ('runtime_flow', project_data.get('has_runtime_flow', False))
+                ] if not available
+            ]
+        }), 200
+
 @projects_bp.route('/<int:project_id>/upload', methods=['POST'])
 @jwt_required()
 def upload_project_files(project_id):
     """Upload files for a project and analyze"""
+    from datetime import datetime
     user_id = int(get_jwt_identity())  # Convert from string to int
+
+    # Get optional file_type parameter from form data
+    file_type = request.form.get('file_type', 'auto')  # 'database_schema', 'runtime_flow', or 'auto'
 
     with get_connection() as conn:
         cur = conn.cursor()
@@ -164,43 +218,119 @@ def upload_project_files(project_id):
         upload_dir = os.path.join(Config.STORAGE_PATH, 'uploads', str(user_id), str(project_id))
         os.makedirs(upload_dir, exist_ok=True)
 
-        # Save uploaded files
+        # Get list of existing files for duplicate checking
+        existing_files = set(os.listdir(upload_dir)) if os.path.exists(upload_dir) else set()
+
+        # Save uploaded files and track results
         files = request.files.getlist('files')
+        upload_results = []
+
         for file in files:
             if file.filename:
                 filename = secure_filename(file.filename)
-                file.save(os.path.join(upload_dir, filename))
 
-        # Update project file_path
-        cur.execute('UPDATE projects SET file_path = %s WHERE id = %s', (upload_dir, project_id))
+                # Check for duplicates
+                if filename in existing_files:
+                    upload_results.append({
+                        'filename': filename,
+                        'status': 'skipped',
+                        'reason': 'File already exists'
+                    })
+                    continue
 
-        # Detect and analyze
+                # Save file
+                file_path = os.path.join(upload_dir, filename)
+                file.save(file_path)
+                upload_results.append({
+                    'filename': filename,
+                    'status': 'success',
+                    'file_type': file_type
+                })
+
+        # Update project file_path if not set
+        if not project_data.get('file_path'):
+            cur.execute('UPDATE projects SET file_path = %s WHERE id = %s', (upload_dir, project_id))
+
+        # Detect and analyze based on file_type
         try:
             manager = ParserManager()
             language, framework = manager.detect_language_and_framework(upload_dir)
 
             # Update project with detected info
             cur.execute(
-                'UPDATE projects SET language = %s, framework = %s WHERE id = %s',
-                (language, framework, project_id)
+                'UPDATE projects SET language = %s, framework = %s, last_upload_date = %s WHERE id = %s',
+                (language, framework, datetime.now(), project_id)
             )
 
-            # Parse schema
-            schema = manager.parse_database_schema(upload_dir, language, framework)
-
-            # Save analysis result
-            cur.execute(
-                '''INSERT INTO analysis_results (project_id, analysis_type, result_data)
-                   VALUES (%s, %s, %s)''',
-                (project_id, 'database_schema', json.dumps(schema))
-            )
-
-            return jsonify({
+            # Determine what analysis to run
+            response_data = {
                 'message': 'Files uploaded and analyzed',
+                'uploads': upload_results,
                 'language': language,
-                'framework': framework,
-                'schema': schema
-            }), 200
+                'framework': framework
+            }
+
+            # Run database schema analysis
+            if file_type in ['database_schema', 'auto']:
+                try:
+                    schema = manager.parse_database_schema(upload_dir, language, framework)
+
+                    # Only save and mark as having schema if actual tables were found
+                    has_tables = schema and schema.get('tables') and len(schema.get('tables', [])) > 0
+
+                    if has_tables:
+                        # Save or update analysis result
+                        cur.execute(
+                            '''INSERT INTO analysis_results (project_id, analysis_type, result_data)
+                               VALUES (%s, %s, %s)''',
+                            (project_id, 'database_schema', json.dumps(schema))
+                        )
+
+                        # Update project status
+                        cur.execute(
+                            'UPDATE projects SET has_database_schema = %s WHERE id = %s',
+                            (True, project_id)
+                        )
+
+                        response_data['schema'] = schema
+                    else:
+                        print(f"Database schema analysis returned no tables")
+                except Exception as schema_error:
+                    print(f"Database schema analysis failed: {schema_error}")
+                    # Don't fail the entire upload if schema analysis fails
+
+            # Run runtime flow analysis
+            if file_type in ['runtime_flow', 'auto']:
+                try:
+                    flow_data = manager.parse_runtime_flow(upload_dir)
+
+                    # Save or update analysis result
+                    cur.execute(
+                        '''INSERT INTO analysis_results (project_id, analysis_type, result_data)
+                           VALUES (%s, %s, %s)''',
+                        (project_id, 'runtime_flow', json.dumps(flow_data))
+                    )
+
+                    # Update project status
+                    cur.execute(
+                        'UPDATE projects SET has_runtime_flow = %s WHERE id = %s',
+                        (True, project_id)
+                    )
+
+                    response_data['flow'] = flow_data
+                except Exception as flow_error:
+                    print(f"Runtime flow analysis failed: {flow_error}")
+                    # Don't fail the entire upload if flow analysis fails
+
+            # Get updated project status
+            cur.execute('SELECT has_database_schema, has_runtime_flow FROM projects WHERE id = %s', (project_id,))
+            status = cur.fetchone()
+            response_data['project_status'] = {
+                'has_database_schema': status['has_database_schema'],
+                'has_runtime_flow': status['has_runtime_flow']
+            }
+
+            return jsonify(response_data), 200
 
         except UnsupportedFrameworkError as e:
             return jsonify({'error': str(e)}), 400

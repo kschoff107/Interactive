@@ -49,6 +49,9 @@ def init_postgres_database(db_url):
                 file_path VARCHAR(500),
                 language VARCHAR(50),
                 framework VARCHAR(50),
+                has_database_schema BOOLEAN DEFAULT FALSE,
+                has_runtime_flow BOOLEAN DEFAULT FALSE,
+                last_upload_date TIMESTAMP,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
@@ -156,6 +159,9 @@ def init_sqlite_database(db_url):
                 file_path VARCHAR(500),
                 language VARCHAR(50),
                 framework VARCHAR(50),
+                has_database_schema BOOLEAN DEFAULT 0,
+                has_runtime_flow BOOLEAN DEFAULT 0,
+                last_upload_date TIMESTAMP,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE

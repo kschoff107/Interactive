@@ -7,11 +7,17 @@ backend/*.pyc
 backend/.env
 backend/venv/
 backend/.pytest_cache/
+backend/*.log
+backend/storage/
+backend/test_project/
+backend/test_*.py
+backend/test_*.json
 
 # Frontend
 frontend/node_modules/
 frontend/build/
 frontend/.env
+frontend/*.log
 
 # Storage
 storage/*

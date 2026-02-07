@@ -17,6 +17,7 @@ import { getLayoutedElements, serializeLayout, applySavedLayout } from '../../ut
 import StickyNote from './StickyNote';
 import Sidebar from './Sidebar';
 import FlowVisualization from './FlowVisualization';
+import CenterUploadArea from './CenterUploadArea';
 
 // Register custom node types
 const nodeTypes = {
@@ -40,6 +41,14 @@ export default function ProjectVisualization() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [flowLoading, setFlowLoading] = useState(false);
   const [flowLayoutTrigger, setFlowLayoutTrigger] = useState(0);
+
+  // Project status and upload area state
+  const [projectStatus, setProjectStatus] = useState({
+    has_database_schema: false,
+    has_runtime_flow: false,
+    last_upload_date: null
+  });
+  const [showUploadArea, setShowUploadArea] = useState(false);
 
   // Layout state
   const [previousLayout, setPreviousLayout] = useState(null);
@@ -67,8 +76,22 @@ export default function ProjectVisualization() {
     }
   }, [onNodesChange]);
 
+  // Fetch project status
+  const fetchProjectStatus = async () => {
+    console.log('[DEBUG] Fetching project status for project:', projectId);
+    try {
+      const response = await api.get(`/projects/${projectId}/status`);
+      console.log('[DEBUG] Project status response:', response.data);
+      setProjectStatus(response.data);
+    } catch (error) {
+      console.error('Error fetching project status:', error);
+    }
+  };
+
   useEffect(() => {
+    console.log('[DEBUG] Initial mount - loading project and status');
     loadProjectAndVisualization();
+    fetchProjectStatus();
   }, [projectId]);
 
   // Load runtime flow data when switching to flow view
@@ -77,6 +100,23 @@ export default function ProjectVisualization() {
       loadRuntimeFlowData();
     }
   }, [activeView, project]);
+
+  // Determine if upload area should be shown
+  useEffect(() => {
+    console.log('[DEBUG] Checking if upload area should show:', {
+      activeView,
+      projectStatus,
+      has_database_schema: projectStatus.has_database_schema,
+      has_runtime_flow: projectStatus.has_runtime_flow
+    });
+
+    const shouldShow =
+      (activeView === 'schema' && !projectStatus.has_database_schema) ||
+      (activeView === 'flow' && !projectStatus.has_runtime_flow);
+
+    console.log('[DEBUG] showUploadArea will be set to:', shouldShow);
+    setShowUploadArea(shouldShow);
+  }, [activeView, projectStatus]);
 
   const loadProjectAndVisualization = async () => {
     try {
@@ -483,6 +523,19 @@ export default function ProjectVisualization() {
     }
   };
 
+  const handleUploadComplete = async (result) => {
+    // Update project status
+    if (result.project_status) {
+      setProjectStatus(result.project_status);
+    }
+
+    // Reload project and visualization
+    await loadProjectAndVisualization();
+    await fetchProjectStatus();
+
+    toast.success('Files uploaded and analyzed successfully!');
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
@@ -624,79 +677,100 @@ export default function ProjectVisualization() {
           <div className="flex-1 relative">
             {activeView === 'schema' && (
               <>
-                <style>{`
-                  .react-flow__node {
-                    --node-bg: ${isDark ? '#1f2937' : '#ffffff'};
-                    --node-text: ${isDark ? '#f3f4f6' : '#111827'};
-                  }
-                  .react-flow__background {
-                    background-color: ${isDark ? '#111827' : '#f9fafb'};
-                  }
-                  .react-flow__edge-path {
-                    stroke: ${isDark ? '#6b7280' : '#9ca3af'};
-                  }
-                  .react-flow__minimap {
-                    background-color: ${isDark ? '#1f2937' : '#ffffff'};
-                  }
-                  .react-flow__controls {
-                    background-color: ${isDark ? '#1f2937' : '#ffffff'};
-                    border: 1px solid ${isDark ? '#374151' : '#e5e7eb'};
-                  }
-                  .react-flow__controls-button {
-                    background-color: ${isDark ? '#1f2937' : '#ffffff'};
-                    color: ${isDark ? '#f3f4f6' : '#111827'};
-                    border-bottom: 1px solid ${isDark ? '#374151' : '#e5e7eb'};
-                  }
-                  .react-flow__controls-button:hover {
-                    background-color: ${isDark ? '#374151' : '#f3f4f6'};
-                  }
-                `}</style>
-                <ReactFlow
-                  nodes={nodes}
-                  edges={edges}
-                  onNodesChange={handleNodesChange}
-                  onEdgesChange={onEdgesChange}
-                  onConnect={onConnect}
-                  fitView
-                  nodeTypes={nodeTypes}
-                >
-                  <Controls>
-                    <ControlButton
-                      onClick={handleAddNote}
-                      title="Add Sticky Note"
+                {console.log('[DEBUG] Rendering schema view - showUploadArea:', showUploadArea)}
+                {showUploadArea ? (
+                  <CenterUploadArea
+                    projectId={projectId}
+                    analysisType="database_schema"
+                    onUploadComplete={handleUploadComplete}
+                  />
+                ) : (
+                  <>
+                    <style>{`
+                      .react-flow__node {
+                        --node-bg: ${isDark ? '#1f2937' : '#ffffff'};
+                        --node-text: ${isDark ? '#f3f4f6' : '#111827'};
+                      }
+                      .react-flow__background {
+                        background-color: ${isDark ? '#111827' : '#f9fafb'};
+                      }
+                      .react-flow__edge-path {
+                        stroke: ${isDark ? '#6b7280' : '#9ca3af'};
+                      }
+                      .react-flow__minimap {
+                        background-color: ${isDark ? '#1f2937' : '#ffffff'};
+                      }
+                      .react-flow__controls {
+                        background-color: ${isDark ? '#1f2937' : '#ffffff'};
+                        border: 1px solid ${isDark ? '#374151' : '#e5e7eb'};
+                      }
+                      .react-flow__controls-button {
+                        background-color: ${isDark ? '#1f2937' : '#ffffff'};
+                        color: ${isDark ? '#f3f4f6' : '#111827'};
+                        border-bottom: 1px solid ${isDark ? '#374151' : '#e5e7eb'};
+                      }
+                      .react-flow__controls-button:hover {
+                        background-color: ${isDark ? '#374151' : '#f3f4f6'};
+                      }
+                    `}</style>
+                    <ReactFlow
+                      nodes={nodes}
+                      edges={edges}
+                      onNodesChange={handleNodesChange}
+                      onEdgesChange={onEdgesChange}
+                      onConnect={onConnect}
+                      fitView
+                      nodeTypes={nodeTypes}
                     >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                      </svg>
-                    </ControlButton>
-                    <ControlButton
-                      onClick={toggleTheme}
-                      title={isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
-                    >
-                      {isDark ? (
-                        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z" clipRule="evenodd" />
-                        </svg>
-                      ) : (
-                        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                          <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z" />
-                        </svg>
-                      )}
-                    </ControlButton>
-                  </Controls>
-                  <MiniMap />
-                  <Background variant="dots" gap={12} size={1} />
-                </ReactFlow>
+                      <Controls>
+                        <ControlButton
+                          onClick={handleAddNote}
+                          title="Add Sticky Note"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                          </svg>
+                        </ControlButton>
+                        <ControlButton
+                          onClick={toggleTheme}
+                          title={isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+                        >
+                          {isDark ? (
+                            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z" clipRule="evenodd" />
+                            </svg>
+                          ) : (
+                            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                              <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z" />
+                            </svg>
+                          )}
+                        </ControlButton>
+                      </Controls>
+                      <MiniMap />
+                      <Background variant="dots" gap={12} size={1} />
+                    </ReactFlow>
+                  </>
+                )}
               </>
             )}
 
             {activeView === 'flow' && (
-              <FlowVisualization
-                flowData={runtimeFlowData}
-                isDark={isDark}
-                onToggleTheme={toggleTheme}
-                layoutTrigger={flowLayoutTrigger}
-              />
+              <>
+                {showUploadArea ? (
+                  <CenterUploadArea
+                    projectId={projectId}
+                    analysisType="runtime_flow"
+                    onUploadComplete={handleUploadComplete}
+                  />
+                ) : (
+                  <FlowVisualization
+                    flowData={runtimeFlowData}
+                    isDark={isDark}
+                    onToggleTheme={toggleTheme}
+                    layoutTrigger={flowLayoutTrigger}
+                  />
+                )}
+              </>
             )}
 
             {activeView !== 'schema' && activeView !== 'flow' && (
