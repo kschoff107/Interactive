@@ -95,7 +95,7 @@ const getLayoutedFlowElements = (nodes, edges, direction = 'TB') => {
   return { nodes: layoutedNodes, edges: layoutedEdges };
 };
 
-export default function FlowVisualization({ flowData, isDark, onToggleTheme, layoutTrigger }) {
+export default function FlowVisualization({ flowData, isDark, onToggleTheme, layoutTrigger, projectId }) {
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const [initialNodes, setInitialNodes] = useState([]);
@@ -300,6 +300,8 @@ export default function FlowVisualization({ flowData, isDark, onToggleTheme, lay
         isOpen={showInsightGuide}
         onClose={() => setShowInsightGuide(false)}
         isDark={isDark}
+        flowData={flowData}
+        projectId={projectId}
       />
     </div>
   );

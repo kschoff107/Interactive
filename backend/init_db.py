@@ -99,6 +99,24 @@ def init_postgres_database(db_url):
             );
         """)
 
+        # Create code_analysis table for AI-generated insights
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS code_analysis (
+                id SERIAL PRIMARY KEY,
+                project_id INTEGER NOT NULL,
+                file_hash VARCHAR(64) NOT NULL,
+                analysis_type VARCHAR(50) DEFAULT 'runtime_flow',
+                narrative_json TEXT NOT NULL,
+                model_used VARCHAR(50),
+                tokens_used INTEGER,
+                generation_time_ms INTEGER,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                expires_at TIMESTAMP,
+                FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+                UNIQUE(project_id, file_hash)
+            );
+        """)
+
         # Create indexes for performance
         cur.execute("CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);")
@@ -106,6 +124,8 @@ def init_postgres_database(db_url):
         cur.execute("CREATE INDEX IF NOT EXISTS idx_analysis_results_project_id ON analysis_results(project_id);")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_workspace_notes_project_id ON workspace_notes(project_id);")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_workspace_layouts_project_id ON workspace_layouts(project_id);")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_code_analysis_lookup ON code_analysis(project_id, file_hash);")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_code_analysis_expires ON code_analysis(expires_at);")
 
         conn.commit()
         print("PostgreSQL database initialized successfully")
@@ -209,6 +229,24 @@ def init_sqlite_database(db_url):
             );
         """)
 
+        # Create code_analysis table for AI-generated insights
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS code_analysis (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                project_id INTEGER NOT NULL,
+                file_hash VARCHAR(64) NOT NULL,
+                analysis_type VARCHAR(50) DEFAULT 'runtime_flow',
+                narrative_json TEXT NOT NULL,
+                model_used VARCHAR(50),
+                tokens_used INTEGER,
+                generation_time_ms INTEGER,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                expires_at TIMESTAMP,
+                FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+                UNIQUE(project_id, file_hash)
+            );
+        """)
+
         # Create indexes for performance
         cur.execute("CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);")
@@ -216,6 +254,8 @@ def init_sqlite_database(db_url):
         cur.execute("CREATE INDEX IF NOT EXISTS idx_analysis_results_project_id ON analysis_results(project_id);")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_workspace_notes_project_id ON workspace_notes(project_id);")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_workspace_layouts_project_id ON workspace_layouts(project_id);")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_code_analysis_lookup ON code_analysis(project_id, file_hash);")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_code_analysis_expires ON code_analysis(expires_at);")
 
         conn.commit()
         print(f"SQLite database initialized successfully at: {db_path}")

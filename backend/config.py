@@ -12,3 +12,10 @@ class Config:
     JWT_ACCESS_TOKEN_EXPIRES = timedelta(hours=1)
     MAX_CONTENT_LENGTH = 100 * 1024 * 1024  # 100MB max upload
     STORAGE_PATH = os.environ.get('STORAGE_PATH') or os.path.join(os.path.dirname(os.path.dirname(__file__)), 'storage')
+
+    # Anthropic API Configuration
+    ANTHROPIC_API_KEY = os.environ.get('ANTHROPIC_API_KEY')
+    ANTHROPIC_MODEL = os.environ.get('ANTHROPIC_MODEL', 'claude-3-5-sonnet-20241022')
+    ANTHROPIC_MAX_TOKENS = int(os.environ.get('ANTHROPIC_MAX_TOKENS', 4000))
+    ANTHROPIC_TEMPERATURE = float(os.environ.get('ANTHROPIC_TEMPERATURE', 0.3))
+    ANALYSIS_CACHE_DAYS = int(os.environ.get('ANALYSIS_CACHE_DAYS', 30))

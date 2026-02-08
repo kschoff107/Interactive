@@ -768,6 +768,7 @@ export default function ProjectVisualization() {
                     isDark={isDark}
                     onToggleTheme={toggleTheme}
                     layoutTrigger={flowLayoutTrigger}
+                    projectId={projectId}
                   />
                 )}
               </>
