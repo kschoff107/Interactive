@@ -57,7 +57,7 @@ Enhance the existing "Decode This" InsightGuide with a second tab that provides 
 - **Frontend:** Enhanced `InsightGuide.jsx` with tabs, loading states, error handling, fallback
 - **Backend:** New `/api/projects/{id}/analyze-code` endpoint orchestrating Claude API
 - **Database:** New `code_analysis` table for caching generated narratives
-- **AI Service:** Claude 3.5 Sonnet integration for narrative generation
+- **AI Service:** Claude Sonnet 4 integration for narrative generation
 - **Fallback:** Template-based basic insights when AI unavailable
 
 ## Database Schema
@@ -75,7 +75,7 @@ CREATE TABLE code_analysis (
     narrative_json TEXT NOT NULL,  -- Stores the 6 sections as JSON
 
     -- Metadata
-    model_used VARCHAR(50),  -- e.g., "claude-3-5-sonnet-20241022"
+    model_used VARCHAR(50),  -- e.g., "claude-sonnet-4-20250514"
     tokens_used INTEGER,
     generation_time_ms INTEGER,
 
@@ -156,7 +156,7 @@ CREATE INDEX idx_code_analysis_expires ON code_analysis(expires_at);
 
 ### Model Configuration
 
-- **Model:** `claude-3-5-sonnet-20241022`
+- **Model:** `claude-sonnet-4-20250514`
 - **Temperature:** 0.3 (consistent, focused responses)
 - **Max Tokens:** 4000
 - **SDK:** Official Anthropic Python SDK
@@ -371,7 +371,7 @@ function generateBasicAnalysis(flowData) {
 ```bash
 # .env file
 ANTHROPIC_API_KEY=sk-ant-xxxxxxxxxxxxx
-ANTHROPIC_MODEL=claude-3-5-sonnet-20241022
+ANTHROPIC_MODEL=claude-sonnet-4-20250514
 ANTHROPIC_MAX_TOKENS=4000
 ANTHROPIC_TEMPERATURE=0.3
 
@@ -391,7 +391,7 @@ load_dotenv()
 
 class Config:
     ANTHROPIC_API_KEY = os.getenv('ANTHROPIC_API_KEY')
-    ANTHROPIC_MODEL = os.getenv('ANTHROPIC_MODEL', 'claude-3-5-sonnet-20241022')
+    ANTHROPIC_MODEL = os.getenv('ANTHROPIC_MODEL', 'claude-sonnet-4-20250514')
     ANTHROPIC_MAX_TOKENS = int(os.getenv('ANTHROPIC_MAX_TOKENS', 4000))
     ANTHROPIC_TEMPERATURE = float(os.getenv('ANTHROPIC_TEMPERATURE', 0.3))
     ANALYSIS_CACHE_DAYS = int(os.getenv('ANALYSIS_CACHE_DAYS', 30))
@@ -541,7 +541,37 @@ frontend/src/
 5. **Performance:** Test with large codebases (100+ functions)
 6. **Cost Monitoring:** Track token usage and costs
 
+## Deployment Lessons Learned
+
+### Issues Encountered During Production Deployment (2026-02-09)
+
+1. **Database Schema Migrations**
+   - `CREATE TABLE IF NOT EXISTS` doesn't add new columns to existing tables
+   - Solution: Added `ALTER TABLE ADD COLUMN IF NOT EXISTS` statements in `init_db.py`
+   - Must run migrations both at build time AND app startup (for gunicorn)
+
+2. **Frontend API URL Configuration**
+   - Frontend and backend deployed on separate Render services (different domains)
+   - `fetch()` with relative URLs goes to frontend domain, not backend
+   - Solution: Use axios api service with `REACT_APP_API_URL` environment variable
+   - React environment variables are baked in at BUILD time, not runtime
+
+3. **Render Deployment Branch**
+   - Frontend was deploying from `master` while backend was on `qual`
+   - Always verify both services deploy from the same branch
+
+4. **Model Name Changes**
+   - Model `claude-3-5-sonnet-20241022` was deprecated/renamed
+   - Updated to `claude-sonnet-4-20250514`
+   - Always check Anthropic's current model names
+
+5. **Database Init on Gunicorn**
+   - `init_database()` was inside `if __name__ == '__main__'` block
+   - Gunicorn imports app.py without running that block
+   - Solution: Move `init_database()` outside the block
+
 ---
 
 **Design Approved:** 2026-02-06
-**Ready for Implementation:** Yes
+**Implementation Complete:** 2026-02-09
+**Deployed to Production:** 2026-02-09
