@@ -127,6 +127,9 @@ def init_postgres_database(db_url):
         cur.execute("CREATE INDEX IF NOT EXISTS idx_code_analysis_lookup ON code_analysis(project_id, file_hash);")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_code_analysis_expires ON code_analysis(expires_at);")
 
+        # Add missing columns to existing tables (migrations for existing deployments)
+        cur.execute("ALTER TABLE projects ADD COLUMN IF NOT EXISTS last_upload_date TIMESTAMP;")
+
         conn.commit()
         print("PostgreSQL database initialized successfully")
         return True
