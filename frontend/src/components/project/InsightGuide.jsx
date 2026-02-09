@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import AnalysisTab from './AnalysisTab';
 import { generateBasicAnalysis } from '../../utils/basicAnalysis';
+import api from '../../services/api';
 import './InsightGuide.css';
 
 const InsightGuide = ({ isOpen, onClose, isDark, flowData, projectId }) => {
@@ -53,32 +54,14 @@ const InsightGuide = ({ isOpen, onClose, isDark, flowData, projectId }) => {
     setError(null);
 
     try {
-      // Get auth token from localStorage
-      const token = localStorage.getItem('token');
-      if (!token) {
-        throw new Error('Please log in to use AI analysis');
-      }
+      // Call the API using the configured api service
+      const response = await api.post(`/projects/${projectId}/analyze-code`, { force_regenerate: false });
 
-      // Call the API
-      const response = await fetch(`/api/projects/${projectId}/analyze-code`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ force_regenerate: false })
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to generate analysis');
-      }
-
-      setAnalysis(data.analysis);
+      setAnalysis(response.data.analysis);
     } catch (err) {
       console.error('Analysis error:', err);
-      setError({ message: err.message });
+      const message = err.response?.data?.error || err.message || 'Failed to generate analysis';
+      setError({ message });
     } finally {
       setLoading(false);
     }
@@ -90,30 +73,14 @@ const InsightGuide = ({ isOpen, onClose, isDark, flowData, projectId }) => {
     setError(null);
 
     try {
-      const token = localStorage.getItem('token');
-      if (!token) {
-        throw new Error('Please log in to use AI analysis');
-      }
+      // Call the API using the configured api service
+      const response = await api.post(`/projects/${projectId}/analyze-code`, { force_regenerate: true });
 
-      const response = await fetch(`/api/projects/${projectId}/analyze-code`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ force_regenerate: true })
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to generate analysis');
-      }
-
-      setAnalysis(data.analysis);
+      setAnalysis(response.data.analysis);
     } catch (err) {
       console.error('Retry error:', err);
-      setError({ message: err.message });
+      const message = err.response?.data?.error || err.message || 'Failed to generate analysis';
+      setError({ message });
     } finally {
       setLoading(false);
     }
