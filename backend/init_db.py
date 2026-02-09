@@ -128,9 +128,21 @@ def init_postgres_database(db_url):
         cur.execute("CREATE INDEX IF NOT EXISTS idx_code_analysis_expires ON code_analysis(expires_at);")
 
         # Add missing columns to existing tables (migrations for existing deployments)
-        cur.execute("ALTER TABLE projects ADD COLUMN IF NOT EXISTS last_upload_date TIMESTAMP;")
+        # Each migration in its own try/except to handle partial schema states
+        migrations = [
+            "ALTER TABLE projects ADD COLUMN IF NOT EXISTS has_database_schema BOOLEAN DEFAULT FALSE;",
+            "ALTER TABLE projects ADD COLUMN IF NOT EXISTS has_runtime_flow BOOLEAN DEFAULT FALSE;",
+            "ALTER TABLE projects ADD COLUMN IF NOT EXISTS last_upload_date TIMESTAMP;",
+        ]
 
-        conn.commit()
+        for migration in migrations:
+            try:
+                cur.execute(migration)
+                conn.commit()
+            except Exception as e:
+                print(f"Migration skipped (may already exist): {e}")
+                conn.rollback()
+
         print("PostgreSQL database initialized successfully")
         return True
 
