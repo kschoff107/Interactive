@@ -56,8 +56,10 @@ def handle_unprocessable_entity(error):
 from routes import init_routes
 init_routes(app)
 
+# Initialize database (runs on import, including gunicorn)
+from init_db import init_database
+init_database()
+
 if __name__ == '__main__':
-    from init_db import init_database
-    init_database()
     # Disable reloader to avoid Windows-specific issues with file handles
     app.run(debug=True, host='0.0.0.0', port=5000, use_reloader=False)
