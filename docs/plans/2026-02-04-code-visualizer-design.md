@@ -1,6 +1,6 @@
 # Code Visualizer - Design Document
 
-**Date:** February 4, 2026 (Updated: February 6, 2026)
+**Date:** February 4, 2026 (Updated: February 9, 2026)
 **Project:** Visual Backend Code Analyzer
 **Architecture:** Monolithic Flask App with Modular Parsers
 **Status:** MVP Deployed on Render
@@ -19,6 +19,9 @@
 - ✅ File upload functionality
 - ✅ Parser Manager with framework detection
 - ✅ SQLAlchemy parser for Python projects
+- ✅ Runtime Flow parser (AST-based function/call analysis)
+- ✅ Flask Routes parser (API routes, blueprints, auth decorators)
+- ✅ AI-powered code analysis with Claude API
 
 **Frontend (React):**
 - ✅ Authentication pages (Login/Register)
@@ -30,6 +33,10 @@
 - ✅ Theme persistence (localStorage)
 - ✅ Responsive design with Tailwind CSS
 - ✅ Toast notifications
+- ✅ Runtime Flow visualization with custom nodes (FunctionNode, ConditionalNode, etc.)
+- ✅ API Routes visualization with BlueprintNode and RouteNode (method badges, auth indicators)
+- ✅ Sidebar navigation between visualization types
+- ✅ "Decode This" insight guide with AI-powered code analysis
 
 **Deployment:**
 - ✅ Deployed on Render (https://interactive-frontend.onrender.com)
@@ -50,7 +57,6 @@
 
 - ⏳ Git repository cloning
 - ⏳ Additional language parsers (TypeScript, JavaScript)
-- ⏳ API Routes visualization
 - ⏳ Export functionality (PNG, SVG, PDF)
 - ⏳ Advanced filtering and search
 - ⏳ Auto-layout algorithm
@@ -423,10 +429,10 @@ Chosen for:
 
 **Left Sidebar Menu:**
 ```
-• Database Schema (active)
-• API Routes (future)
+• Database Schema (implemented)
+• Runtime Flow (implemented)
+• API Routes (implemented)
 • Code Structure (future)
-• Runtime Flow (future)
 ```
 
 **Main Workspace Layout:**
@@ -856,6 +862,9 @@ code-visualizer/
 8. ✅ **Deploy MVP** to Render
 9. ✅ **Add light/dark mode** toggle
 10. ✅ **PostgreSQL production database** with SQLite dev support
+11. ✅ **Runtime Flow visualization** (AST-based function/call graph)
+12. ✅ **AI-powered code analysis** with Claude API ("Decode This" feature)
+13. ✅ **API Routes visualization** (Flask routes parser with blueprints, methods, auth detection)
 
 ## Next Steps
 
@@ -892,9 +901,7 @@ code-visualizer/
 
 ## Future Enhancements (Post-MVP)
 
-- API Routes visualization
 - Code Structure diagram
-- Runtime Flow visualization
 - **Process Flow visualization** (Business process modeling)
   - BPMN-style process diagrams
   - Visual process builder with drag-and-drop
