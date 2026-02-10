@@ -44,4 +44,12 @@ export const projectsAPI = {
     api.post(`/projects/${id}/layout`, { layout_data: layoutData }),
 };
 
+// Git import endpoints
+export const gitAPI = {
+  getTree: (url) =>
+    api.get(`/projects/git/tree?url=${encodeURIComponent(url)}`),
+  importFiles: (projectId, url, files, branch) =>
+    api.post(`/projects/${projectId}/import-git`, { url, files, branch }),
+};
+
 export default api;

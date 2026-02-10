@@ -7,6 +7,7 @@ import json
 from werkzeug.utils import secure_filename
 from config import Config
 from parsers.parser_manager import ParserManager, UnsupportedFrameworkError
+from services.git_api_service import GitApiService
 
 projects_bp = Blueprint('projects', __name__)
 
@@ -598,3 +599,195 @@ def save_workspace_layout(project_id):
         'message': 'Layout saved successfully',
         'layout_id': layout_id
     }), 200
+
+
+# ---------------------------------------------------------------------------
+# Git Import Endpoints
+# ---------------------------------------------------------------------------
+
+@projects_bp.route('/git/tree', methods=['GET'])
+@jwt_required()
+def get_git_tree():
+    """Fetch file tree from a public GitHub repository"""
+    url = request.args.get('url')
+    if not url:
+        return jsonify({'error': 'URL parameter is required'}), 400
+
+    git_service = GitApiService()
+
+    # Parse and validate URL
+    parsed = git_service.parse_github_url(url)
+    if not parsed['valid']:
+        return jsonify({'error': parsed['error']}), 400
+
+    # Use branch from URL if provided, otherwise auto-detect
+    branch = parsed.get('branch')
+
+    # Get file tree
+    result = git_service.get_repo_tree(parsed['owner'], parsed['repo'], branch)
+    if not result['success']:
+        return jsonify({'error': result['error']}), 400
+
+    return jsonify({
+        'owner': parsed['owner'],
+        'repo': parsed['repo'],
+        'branch': result['branch'],
+        'files': result['files'],
+        'truncated': result['truncated']
+    }), 200
+
+
+@projects_bp.route('/<int:project_id>/import-git', methods=['POST'])
+@jwt_required()
+def import_from_git(project_id):
+    """Import selected files from a GitHub repository into a project"""
+    from datetime import datetime
+    user_id = int(get_jwt_identity())
+    data = request.get_json()
+
+    url = data.get('url')
+    files = data.get('files', [])
+    branch = data.get('branch', 'main')
+
+    if not url:
+        return jsonify({'error': 'Repository URL is required'}), 400
+
+    if not files:
+        return jsonify({'error': 'At least one file must be selected'}), 400
+
+    if len(files) > 50:
+        return jsonify({'error': 'Maximum 50 files can be imported at once'}), 400
+
+    git_service = GitApiService()
+
+    # Parse and validate URL
+    parsed = git_service.parse_github_url(url)
+    if not parsed['valid']:
+        return jsonify({'error': parsed['error']}), 400
+
+    with get_connection() as conn:
+        cur = conn.cursor()
+
+        # Verify project ownership
+        cur.execute('SELECT * FROM projects WHERE id = %s AND user_id = %s',
+                    (project_id, user_id))
+        project_data = cur.fetchone()
+
+        if not project_data:
+            return jsonify({'error': 'Project not found'}), 404
+
+        # Download files to project storage
+        upload_dir = os.path.join(Config.STORAGE_PATH, 'uploads',
+                                  str(user_id), str(project_id))
+
+        result = git_service.download_files(
+            parsed['owner'], parsed['repo'], files, upload_dir, branch
+        )
+
+        if result['downloaded'] == 0:
+            return jsonify({
+                'error': 'Failed to download any files',
+                'details': result['errors']
+            }), 500
+
+        # Update project metadata
+        cur.execute('''
+            UPDATE projects
+            SET file_path = %s, git_url = %s, source_type = %s, last_upload_date = %s
+            WHERE id = %s
+        ''', (upload_dir, url, 'git', datetime.now(), project_id))
+
+        # Run analysis (same flow as file upload)
+        response_data = {
+            'message': 'Files imported from GitHub',
+            'downloaded': result['downloaded'],
+            'failed': result['failed'],
+            'errors': result['errors']
+        }
+
+        try:
+            manager = ParserManager()
+            language, framework = manager.detect_language_and_framework(upload_dir)
+
+            cur.execute(
+                'UPDATE projects SET language = %s, framework = %s WHERE id = %s',
+                (language, framework, project_id)
+            )
+
+            response_data['language'] = language
+            response_data['framework'] = framework
+
+            # Run database schema analysis
+            try:
+                schema = manager.parse_database_schema(upload_dir, language, framework)
+
+                tables = schema.get('tables', []) if schema else []
+                real_tables = [t for t in tables if t.get('name') not in ['Example_Table', 'example_table']]
+
+                if len(real_tables) > 0:
+                    cur.execute(
+                        '''INSERT INTO analysis_results (project_id, analysis_type, result_data)
+                           VALUES (%s, %s, %s)''',
+                        (project_id, 'database_schema', json.dumps(schema))
+                    )
+                    cur.execute(
+                        'UPDATE projects SET has_database_schema = %s WHERE id = %s',
+                        (True, project_id)
+                    )
+                    response_data['schema'] = schema
+            except Exception as schema_error:
+                print(f"Database schema analysis failed: {schema_error}")
+
+            # Run runtime flow analysis
+            try:
+                flow_data = manager.parse_runtime_flow(upload_dir)
+
+                cur.execute(
+                    '''INSERT INTO analysis_results (project_id, analysis_type, result_data)
+                       VALUES (%s, %s, %s)''',
+                    (project_id, 'runtime_flow', json.dumps(flow_data))
+                )
+                cur.execute(
+                    'UPDATE projects SET has_runtime_flow = %s WHERE id = %s',
+                    (True, project_id)
+                )
+                response_data['flow'] = flow_data
+            except Exception as flow_error:
+                print(f"Runtime flow analysis failed: {flow_error}")
+
+            # Run API routes analysis
+            try:
+                routes_data = manager.parse_api_routes(upload_dir)
+
+                cur.execute(
+                    '''INSERT INTO analysis_results (project_id, analysis_type, result_data)
+                       VALUES (%s, %s, %s)''',
+                    (project_id, 'api_routes', json.dumps(routes_data))
+                )
+                cur.execute(
+                    'UPDATE projects SET has_api_routes = %s WHERE id = %s',
+                    (True, project_id)
+                )
+                response_data['routes'] = routes_data
+            except Exception as routes_error:
+                print(f"API routes analysis failed: {routes_error}")
+
+            # Get updated project status
+            cur.execute(
+                'SELECT has_database_schema, has_runtime_flow, has_api_routes FROM projects WHERE id = %s',
+                (project_id,)
+            )
+            status = cur.fetchone()
+            response_data['project_status'] = {
+                'has_database_schema': status['has_database_schema'],
+                'has_runtime_flow': status['has_runtime_flow'],
+                'has_api_routes': status['has_api_routes']
+            }
+
+        except UnsupportedFrameworkError as e:
+            response_data['analysis_error'] = str(e)
+        except Exception as e:
+            print(f"Analysis failed during git import: {e}")
+            response_data['analysis_error'] = f'Analysis failed: {str(e)}'
+
+        return jsonify(response_data), 200
