@@ -1,6 +1,6 @@
 # Code Visualizer - Design Document
 
-**Date:** February 4, 2026 (Updated: February 10, 2026 — Per-Workspace File Storage)
+**Date:** February 4, 2026 (Updated: February 10, 2026 — Workspace Context Menu)
 **Project:** Visual Backend Code Analyzer
 **Architecture:** Monolithic Flask App with Modular Parsers
 **Status:** MVP Deployed on Render
@@ -51,7 +51,8 @@
 - ✅ GitHub Import modal with file browser, checkbox selection, quick-select by extension
 - ✅ Source Files panel in sidebar (git-imported projects) — full repo tree from GitHub API, clickable repo link, branch badge
 - ✅ Multi-workspace sidebar: expandable two-level tree with workspace sub-items per visualization type
-- ✅ Workspace creation (+), inline rename (double-click), and delete (x) in sidebar
+- ✅ Workspace creation (+) in sidebar
+- ✅ Three-dot context menu on workspace items: Rename, Duplicate, Clear Data, Delete (with confirmation modal)
 - ✅ Workspace-aware data loading and layout persistence (each workspace loads independently)
 - ✅ Per-workspace file upload via CenterUploadArea (files go to workspace, not project)
 - ✅ Empty workspace detection: shows upload area when workspace has no analysis data
@@ -512,8 +513,8 @@ VISUALIZATIONS
 - Each visualization type is expandable with chevron toggle
 - [+] button creates a new workspace under that type
 - Clicking a workspace loads its analysis data and layout
-- Double-click workspace name for inline rename
-- Hover shows delete (x) button
+- Hover shows three-dot (...) menu with: Rename, Duplicate, Clear Data, Delete
+- Delete action shows confirmation modal before proceeding
 
 **Main Workspace Layout:**
 
@@ -957,6 +958,7 @@ code-visualizer/
 15. ✅ **Source Files panel** in project sidebar (full repo tree, branch badge, clickable repo link)
 16. ✅ **Multi-workspace support** — multiple workspaces per visualization type with create, rename, delete; expandable sidebar tree; workspace-scoped data loading and layout persistence
 17. ✅ **Per-workspace file storage** — files uploaded and stored per workspace (not project-level); workspace_files table tracks files; analyze endpoints use workspace files only; empty workspace shows upload area; workspace deletion cleans up files on disk
+18. ✅ **Workspace context menu** — replaced red X delete button with three-dot (...) menu on hover; dropdown with Rename, Duplicate, Clear Data, Delete options; delete requires confirmation modal; duplicate creates new workspace with "(Copy)" suffix; clear data removes all files and analysis from workspace
 
 ## Next Steps
 
@@ -968,7 +970,6 @@ code-visualizer/
    - Sequelize parser (JavaScript)
 4. **Add workspace features:**
    - Table search and filtering
-   - Context menu (right-click)
 5. **Write comprehensive tests:**
    - Parser unit tests
    - API endpoint tests
