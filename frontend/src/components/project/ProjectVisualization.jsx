@@ -822,6 +822,22 @@ export default function ProjectVisualization() {
     await loadWorkspaces();
   };
 
+  const handleImportSourceFiles = async (paths) => {
+    if (!activeWorkspaceId) {
+      toast.error('Select a workspace first');
+      return;
+    }
+    toast.info(`Importing ${paths.length} file(s) from repository...`);
+    try {
+      const response = await workspacesAPI.importSourceFiles(projectId, activeWorkspaceId, paths);
+      const result = response.data;
+      await handleUploadComplete(result);
+    } catch (error) {
+      const msg = error.response?.data?.error || 'Failed to import source files';
+      toast.error(msg);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
@@ -993,6 +1009,7 @@ export default function ProjectVisualization() {
           onWorkspaceDelete={handleWorkspaceDelete}
           onWorkspaceDuplicate={handleWorkspaceDuplicate}
           onWorkspaceClearData={handleWorkspaceClearData}
+          onImportSourceFiles={handleImportSourceFiles}
         />
 
         {/* Visualization Area */}
@@ -1007,6 +1024,7 @@ export default function ProjectVisualization() {
                     workspaceId={activeWorkspaceId}
                     analysisType="database_schema"
                     onUploadComplete={handleUploadComplete}
+                    onImportSourceFiles={handleImportSourceFiles}
                   />
                 ) : (
                   <>
@@ -1086,6 +1104,7 @@ export default function ProjectVisualization() {
                     workspaceId={activeWorkspaceId}
                     analysisType="runtime_flow"
                     onUploadComplete={handleUploadComplete}
+                    onImportSourceFiles={handleImportSourceFiles}
                   />
                 ) : (
                   <FlowVisualization
@@ -1110,6 +1129,7 @@ export default function ProjectVisualization() {
                     workspaceId={activeWorkspaceId}
                     analysisType="api_routes"
                     onUploadComplete={handleUploadComplete}
+                    onImportSourceFiles={handleImportSourceFiles}
                   />
                 ) : (
                   <ApiRoutesVisualization

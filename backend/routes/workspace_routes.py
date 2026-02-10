@@ -7,6 +7,7 @@ import os
 import shutil
 from config import Config
 from parsers.parser_manager import ParserManager, UnsupportedFrameworkError
+from services.git_api_service import GitApiService
 
 workspaces_bp = Blueprint('workspaces', __name__)
 
@@ -386,6 +387,91 @@ def delete_workspace_file(project_id, workspace_id, file_id):
         cur.execute('DELETE FROM workspace_files WHERE id = %s', (file_id,))
 
     return jsonify({'message': 'File deleted'}), 200
+
+
+# ---------------------------------------------------------------------------
+# Import Source Files from GitHub
+# ---------------------------------------------------------------------------
+
+@workspaces_bp.route('/<int:project_id>/workspaces/<int:workspace_id>/import-source', methods=['POST'])
+@jwt_required()
+def import_source_files(project_id, workspace_id):
+    """Import files from the project's linked GitHub repository into a workspace."""
+    user_id = int(get_jwt_identity())
+    data = request.get_json()
+
+    paths = data.get('paths', [])
+    if not paths or not isinstance(paths, list):
+        return jsonify({'error': 'paths is required (array of file paths)'}), 400
+
+    if len(paths) > 50:
+        return jsonify({'error': 'Too many files. Maximum is 50 per import.'}), 400
+
+    with get_connection() as conn:
+        cur = conn.cursor()
+
+        project = verify_project_ownership(cur, project_id, user_id)
+        if not project:
+            return jsonify({'error': 'Project not found'}), 404
+
+        # Must be a git-imported project
+        if not project.get('git_url'):
+            return jsonify({'error': 'This project is not linked to a GitHub repository'}), 400
+
+        # Verify workspace belongs to project
+        cur.execute(
+            'SELECT * FROM workspaces WHERE id = %s AND project_id = %s',
+            (workspace_id, project_id)
+        )
+        workspace = cur.fetchone()
+        if not workspace:
+            return jsonify({'error': 'Workspace not found'}), 404
+
+        # Parse git URL and download files
+        git_service = GitApiService()
+        parsed = git_service.parse_github_url(project['git_url'])
+        if not parsed.get('valid'):
+            return jsonify({'error': 'Invalid git URL on project'}), 400
+
+        branch = project.get('git_branch') or parsed.get('branch') or 'main'
+        ws_dir = get_workspace_file_dir(user_id, project_id, workspace_id)
+        os.makedirs(ws_dir, exist_ok=True)
+
+        result = git_service.download_files(parsed['owner'], parsed['repo'], paths, ws_dir, branch)
+
+        # Record each downloaded file in workspace_files
+        upload_results = []
+        for path in paths:
+            safe_path = os.path.normpath(path)
+            file_path = os.path.join(ws_dir, safe_path)
+            if os.path.exists(file_path):
+                file_size = os.path.getsize(file_path)
+                filename = os.path.basename(safe_path)
+                cur.execute(
+                    '''INSERT INTO workspace_files (workspace_id, file_name, file_path, file_size)
+                       VALUES (%s, %s, %s, %s)''',
+                    (workspace_id, filename, file_path, file_size)
+                )
+                upload_results.append({
+                    'filename': filename,
+                    'status': 'success',
+                    'size': file_size,
+                })
+
+        # Update workspace
+        cur.execute(
+            'UPDATE workspaces SET file_path = %s, updated_at = CURRENT_TIMESTAMP WHERE id = %s',
+            (ws_dir, workspace_id)
+        )
+
+    # Include any errors from the download
+    error_files = [e['path'] for e in result.get('errors', [])]
+
+    return jsonify({
+        'message': f'{len(upload_results)} file(s) imported from source repository',
+        'uploads': upload_results,
+        'failed': error_files,
+    }), 200
 
 
 # ---------------------------------------------------------------------------

@@ -3,9 +3,10 @@ import { useDropzone } from 'react-dropzone';
 import { workspacesAPI } from '../../services/api';
 import './CenterUploadArea.css';
 
-const CenterUploadArea = ({ projectId, workspaceId, analysisType, onUploadComplete, onAnalyze, hasSourceFiles }) => {
+const CenterUploadArea = ({ projectId, workspaceId, analysisType, onUploadComplete, onAnalyze, hasSourceFiles, onImportSourceFiles }) => {
   const [uploading, setUploading] = useState(false);
   const [uploadStatus, setUploadStatus] = useState(null);
+  const [isSourceDragOver, setIsSourceDragOver] = useState(false);
 
   const onDrop = useCallback(async (acceptedFiles) => {
     if (acceptedFiles.length === 0) return;
@@ -50,6 +51,38 @@ const CenterUploadArea = ({ projectId, workspaceId, analysisType, onUploadComple
     disabled: uploading || !workspaceId
   });
 
+  // Custom handlers for source file drops (from SourceFilesPanel)
+  const handleSourceDragOver = (e) => {
+    if (e.dataTransfer.types.includes('application/x-source-files')) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'copy';
+      setIsSourceDragOver(true);
+    }
+  };
+
+  const handleSourceDragLeave = (e) => {
+    if (!e.currentTarget.contains(e.relatedTarget)) {
+      setIsSourceDragOver(false);
+    }
+  };
+
+  const handleSourceDrop = (e) => {
+    const sourceData = e.dataTransfer.getData('application/x-source-files');
+    if (sourceData) {
+      e.preventDefault();
+      e.stopPropagation();
+      setIsSourceDragOver(false);
+      try {
+        const paths = JSON.parse(sourceData);
+        if (paths.length > 0 && onImportSourceFiles) {
+          onImportSourceFiles(paths);
+        }
+      } catch {
+        // ignore parse errors
+      }
+    }
+  };
+
   const getAnalysisTypeDisplay = () => {
     const types = {
       'database_schema': {
@@ -80,7 +113,12 @@ const CenterUploadArea = ({ projectId, workspaceId, analysisType, onUploadComple
   const display = getAnalysisTypeDisplay();
 
   return (
-    <div className="center-upload-area">
+    <div
+      className="center-upload-area"
+      onDragOver={handleSourceDragOver}
+      onDragLeave={handleSourceDragLeave}
+      onDrop={handleSourceDrop}
+    >
       <div className="flex flex-col items-center justify-center h-full gap-6 p-8">
         <div className="text-5xl">{display.icon}</div>
         <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
@@ -93,11 +131,11 @@ const CenterUploadArea = ({ projectId, workspaceId, analysisType, onUploadComple
         {/* Upload area */}
         <div
           {...getRootProps()}
-          className={`upload-dropzone ${isDragActive ? 'drag-active' : ''} ${uploading ? 'uploading' : ''}`}
+          className={`upload-dropzone ${isDragActive ? 'drag-active' : ''} ${isSourceDragOver ? 'source-drag-active' : ''} ${uploading ? 'uploading' : ''}`}
         >
           <input {...getInputProps()} />
 
-          {!uploading && !uploadStatus && (
+          {!uploading && !uploadStatus && !isSourceDragOver && (
             <>
               <div className="upload-prompt">
                 {isDragActive ?
@@ -108,6 +146,15 @@ const CenterUploadArea = ({ projectId, workspaceId, analysisType, onUploadComple
               <button type="button" className="browse-button">Browse Files</button>
               <p className="accepted-files">Accepted: {display.acceptedFiles}</p>
             </>
+          )}
+
+          {!uploading && !uploadStatus && isSourceDragOver && (
+            <div className="upload-prompt source-drop-prompt">
+              <svg className="w-8 h-8 mx-auto mb-2 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              </svg>
+              Drop to import from source repository
+            </div>
           )}
 
           {uploading && (

@@ -43,34 +43,74 @@ function buildFileTree(files) {
   return root;
 }
 
-function TreeNode({ node, name, depth }) {
+function getAllFilesInNode(node) {
+  const files = [...node.files];
+  for (const child of Object.values(node.children)) {
+    files.push(...getAllFilesInNode(child));
+  }
+  return files;
+}
+
+function TreeNode({ node, name, depth, onImportFiles }) {
   const [expanded, setExpanded] = useState(depth < 1);
   const childDirs = Object.entries(node.children);
   const childFiles = node.files;
   const hasChildren = childDirs.length > 0 || childFiles.length > 0;
 
+  const handleFolderDragStart = (e) => {
+    e.stopPropagation();
+    const allFiles = getAllFilesInNode(node);
+    const paths = allFiles.map(f => f.path);
+    e.dataTransfer.setData('application/x-source-files', JSON.stringify(paths));
+    e.dataTransfer.effectAllowed = 'copy';
+  };
+
+  const handleFolderImport = (e) => {
+    e.stopPropagation();
+    if (!onImportFiles) return;
+    const allFiles = getAllFilesInNode(node);
+    onImportFiles(allFiles.map(f => f.path));
+  };
+
   return (
     <div style={{ paddingLeft: depth > 0 ? 12 : 0 }}>
       {name && (
-        <button
-          onClick={() => setExpanded(!expanded)}
-          className="flex items-center gap-1.5 w-full py-0.5 px-1 rounded text-left hover:bg-gray-100 dark:hover:bg-gray-700/50 group"
+        <div
+          draggable
+          onDragStart={handleFolderDragStart}
+          className="group"
         >
-          {hasChildren ? (
-            <svg
-              className={`w-3 h-3 text-gray-400 transition-transform flex-shrink-0 ${expanded ? 'rotate-90' : ''}`}
-              fill="currentColor" viewBox="0 0 20 20"
-            >
-              <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
+          <button
+            onClick={() => setExpanded(!expanded)}
+            className="flex items-center gap-1.5 w-full py-0.5 px-1 rounded text-left hover:bg-gray-100 dark:hover:bg-gray-700/50"
+          >
+            {hasChildren ? (
+              <svg
+                className={`w-3 h-3 text-gray-400 transition-transform flex-shrink-0 ${expanded ? 'rotate-90' : ''}`}
+                fill="currentColor" viewBox="0 0 20 20"
+              >
+                <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
+              </svg>
+            ) : (
+              <span className="w-3" />
+            )}
+            <svg className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+              <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" />
             </svg>
-          ) : (
-            <span className="w-3" />
-          )}
-          <svg className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-            <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" />
-          </svg>
-          <span className="text-xs text-gray-700 dark:text-gray-300 truncate">{node.name}</span>
-        </button>
+            <span className="text-xs text-gray-700 dark:text-gray-300 truncate flex-1">{node.name}</span>
+            {onImportFiles && (
+              <span
+                onClick={handleFolderImport}
+                className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-blue-100 dark:hover:bg-blue-900/30 text-blue-500 transition-opacity cursor-pointer flex-shrink-0"
+                title="Import folder to workspace"
+              >
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+              </span>
+            )}
+          </button>
+        </div>
       )}
 
       {(expanded || !name) && (
@@ -78,7 +118,7 @@ function TreeNode({ node, name, depth }) {
           {childDirs
             .sort(([a], [b]) => a.localeCompare(b))
             .map(([key, childNode]) => (
-              <TreeNode key={key} node={childNode} name={key} depth={depth + 1} />
+              <TreeNode key={key} node={childNode} name={key} depth={depth + 1} onImportFiles={onImportFiles} />
             ))}
           {childFiles
             .sort((a, b) => a.path.localeCompare(b.path))
@@ -87,14 +127,33 @@ function TreeNode({ node, name, depth }) {
               return (
                 <div
                   key={file.path}
-                  className="flex items-center gap-1.5 py-0.5 px-1 rounded text-xs text-gray-600 dark:text-gray-400"
+                  draggable
+                  onDragStart={(e) => {
+                    e.dataTransfer.setData('application/x-source-files', JSON.stringify([file.path]));
+                    e.dataTransfer.effectAllowed = 'copy';
+                  }}
+                  className="group flex items-center gap-1.5 py-0.5 px-1 rounded text-xs text-gray-600 dark:text-gray-400 cursor-grab active:cursor-grabbing hover:bg-gray-50 dark:hover:bg-gray-700/30"
                   style={{ paddingLeft: (depth + 1) * 12 }}
                 >
                   <span className="w-3" />
                   <svg className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                   </svg>
-                  <span className="truncate">{fileName}</span>
+                  <span className="truncate flex-1">{fileName}</span>
+                  {onImportFiles && (
+                    <span
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onImportFiles([file.path]);
+                      }}
+                      className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-blue-100 dark:hover:bg-blue-900/30 text-blue-500 transition-opacity cursor-pointer flex-shrink-0"
+                      title="Import to workspace"
+                    >
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                      </svg>
+                    </span>
+                  )}
                   <span className="ml-auto flex-shrink-0 text-gray-400 dark:text-gray-500">
                     {formatFileSize(file.size)}
                   </span>
@@ -107,7 +166,7 @@ function TreeNode({ node, name, depth }) {
   );
 }
 
-export default function SourceFilesPanel({ project }) {
+export default function SourceFilesPanel({ project, onImportFiles }) {
   const [collapsed, setCollapsed] = useState(false);
   const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -195,6 +254,13 @@ export default function SourceFilesPanel({ project }) {
             </div>
           )}
 
+          {/* Drag hint */}
+          {onImportFiles && files.length > 0 && !loading && (
+            <p className="text-xs text-gray-400 dark:text-gray-500 px-1 py-1 italic">
+              Drag files to workspace or click the arrow icon
+            </p>
+          )}
+
           {/* File tree */}
           <div className="mt-2 max-h-60 overflow-y-auto">
             {loading ? (
@@ -205,7 +271,7 @@ export default function SourceFilesPanel({ project }) {
                 </svg>
               </div>
             ) : files.length > 0 ? (
-              <TreeNode node={tree} name="" depth={0} />
+              <TreeNode node={tree} name="" depth={0} onImportFiles={onImportFiles} />
             ) : (
               <p className="text-xs text-gray-400 dark:text-gray-500 px-1 py-2">No files found</p>
             )}

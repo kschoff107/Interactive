@@ -287,6 +287,7 @@ export default function Sidebar({
   onWorkspaceDelete,
   onWorkspaceDuplicate,
   onWorkspaceClearData,
+  onImportSourceFiles,
 }) {
   // Auto-expand sections that contain the active workspace or have workspaces
   const [expanded, setExpanded] = useState(() => {
@@ -416,7 +417,7 @@ export default function Sidebar({
       </nav>
 
       {/* Source Files Panel (git-imported projects only) */}
-      <SourceFilesPanel project={project} />
+      <SourceFilesPanel project={project} onImportFiles={onImportSourceFiles} />
 
       {/* Sidebar Footer */}
       <div className="px-4 py-3 border-t border-gray-200 dark:border-gray-700">

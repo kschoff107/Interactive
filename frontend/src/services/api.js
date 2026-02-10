@@ -80,6 +80,8 @@ export const workspacesAPI = {
     api.get(`/projects/${projectId}/workspaces/${workspaceId}/files`),
   deleteFile: (projectId, workspaceId, fileId) =>
     api.delete(`/projects/${projectId}/workspaces/${workspaceId}/files/${fileId}`),
+  importSourceFiles: (projectId, workspaceId, paths) =>
+    api.post(`/projects/${projectId}/workspaces/${workspaceId}/import-source`, { paths }),
 };
 
 // Git import endpoints
