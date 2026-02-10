@@ -3,6 +3,7 @@ from typing import Tuple, Dict
 from .sqlalchemy_parser import SQLAlchemyParser
 from .sqlite_parser import SQLiteParser
 from .runtime_flow_parser import RuntimeFlowParser
+from .flask_routes_parser import FlaskRoutesParser
 
 class UnsupportedFrameworkError(Exception):
     """Raised when framework is not supported"""
@@ -61,6 +62,41 @@ class ParserManager:
         # Use RuntimeFlowParser
         parser = RuntimeFlowParser(project_path, options)
         return parser.parse()
+
+    def parse_api_routes(self, project_path: str, options: Dict = None) -> Dict:
+        """Parse Flask/FastAPI routes from Python code"""
+        # Check if project has Python files
+        if not self._has_python_files(project_path):
+            raise UnsupportedFrameworkError("No Python files found in project")
+
+        # Check for Flask or FastAPI framework
+        if not self._has_web_framework(project_path):
+            raise UnsupportedFrameworkError("No Flask or FastAPI framework detected in project")
+
+        # Use FlaskRoutesParser
+        parser = FlaskRoutesParser(project_path, options)
+        return parser.parse()
+
+    def _has_web_framework(self, path: str) -> bool:
+        """Check if project uses Flask or FastAPI"""
+        for root, dirs, files in os.walk(path):
+            # Skip common non-source directories
+            dirs[:] = [d for d in dirs if d not in [
+                '__pycache__', '.git', '.venv', 'venv', 'node_modules'
+            ]]
+            for file in files:
+                if file.endswith('.py'):
+                    file_path = os.path.join(root, file)
+                    try:
+                        with open(file_path, 'r', encoding='utf-8') as f:
+                            content = f.read()
+                            if 'from flask' in content.lower() or 'import flask' in content.lower():
+                                return True
+                            if 'from fastapi' in content.lower() or 'import fastapi' in content.lower():
+                                return True
+                    except:
+                        continue
+        return False
 
     def _create_placeholder_schema(self, project_path: str, language: str, framework: str) -> Dict:
         """Create a placeholder schema for unsupported frameworks"""

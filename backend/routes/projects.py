@@ -178,18 +178,21 @@ def get_project_status(project_id):
             'project_id': project_id,
             'has_database_schema': project_data.get('has_database_schema', False),
             'has_runtime_flow': project_data.get('has_runtime_flow', False),
+            'has_api_routes': project_data.get('has_api_routes', False),
             'last_upload_date': last_upload_str,
             'file_count': file_count,
             'available_views': [
                 view for view, available in [
                     ('database_schema', project_data.get('has_database_schema', False)),
-                    ('runtime_flow', project_data.get('has_runtime_flow', False))
+                    ('runtime_flow', project_data.get('has_runtime_flow', False)),
+                    ('api_routes', project_data.get('has_api_routes', False))
                 ] if available
             ],
             'missing_views': [
                 view for view, available in [
                     ('database_schema', project_data.get('has_database_schema', False)),
-                    ('runtime_flow', project_data.get('has_runtime_flow', False))
+                    ('runtime_flow', project_data.get('has_runtime_flow', False)),
+                    ('api_routes', project_data.get('has_api_routes', False))
                 ] if not available
             ]
         }), 200
@@ -419,6 +422,92 @@ def get_runtime_flow(project_id):
         'flow': json.loads(analysis_data['result_data']),
         'created_at': analysis_data['created_at']
     }), 200
+
+@projects_bp.route('/<int:project_id>/analyze/api-routes', methods=['POST'])
+@jwt_required()
+def analyze_api_routes(project_id):
+    """Analyze Flask/FastAPI routes in project files"""
+    user_id = int(get_jwt_identity())
+
+    with get_connection() as conn:
+        cur = conn.cursor()
+
+        # Verify project ownership
+        cur.execute('SELECT * FROM projects WHERE id = %s AND user_id = %s', (project_id, user_id))
+        project_data = cur.fetchone()
+
+        if not project_data:
+            return jsonify({'error': 'Project not found'}), 404
+
+        # Check if project has files uploaded
+        file_path = project_data.get('file_path')
+        if not file_path or not os.path.exists(file_path):
+            return jsonify({'error': 'Project files not found. Please upload project files first.'}), 400
+
+        try:
+            # Parse API routes
+            manager = ParserManager()
+            routes_data = manager.parse_api_routes(file_path)
+
+            # Save analysis result
+            cur.execute(
+                '''INSERT INTO analysis_results (project_id, analysis_type, result_data)
+                   VALUES (%s, %s, %s)''',
+                (project_id, 'api_routes', json.dumps(routes_data))
+            )
+
+            # Update project status
+            cur.execute(
+                'UPDATE projects SET has_api_routes = %s WHERE id = %s',
+                (True, project_id)
+            )
+
+            return jsonify({
+                'message': 'API routes analysis completed',
+                'routes': routes_data
+            }), 200
+
+        except UnsupportedFrameworkError as e:
+            return jsonify({'error': str(e)}), 400
+        except Exception as e:
+            conn.rollback()
+            return jsonify({'error': f'API routes analysis failed: {str(e)}'}), 500
+
+
+@projects_bp.route('/<int:project_id>/api-routes', methods=['GET'])
+@jwt_required()
+def get_api_routes(project_id):
+    """Get cached API routes analysis results"""
+    user_id = int(get_jwt_identity())
+
+    with get_connection() as conn:
+        cur = conn.cursor()
+
+        # Verify project ownership
+        cur.execute('SELECT * FROM projects WHERE id = %s AND user_id = %s', (project_id, user_id))
+        project_data = cur.fetchone()
+
+        if not project_data:
+            return jsonify({'error': 'Project not found'}), 404
+
+        # Get latest api_routes analysis result
+        cur.execute(
+            '''SELECT * FROM analysis_results
+               WHERE project_id = %s AND analysis_type = %s
+               ORDER BY created_at DESC LIMIT 1''',
+            (project_id, 'api_routes')
+        )
+        analysis_data = cur.fetchone()
+
+    if not analysis_data:
+        return jsonify({'error': 'No API routes analysis found. Please analyze the project first.'}), 404
+
+    return jsonify({
+        'analysis_id': analysis_data['id'],
+        'routes': json.loads(analysis_data['result_data']),
+        'created_at': analysis_data['created_at']
+    }), 200
+
 
 @projects_bp.route('/<int:project_id>/layout', methods=['GET'])
 @jwt_required()

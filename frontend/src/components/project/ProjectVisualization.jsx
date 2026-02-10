@@ -17,6 +17,7 @@ import { getLayoutedElements, serializeLayout, applySavedLayout } from '../../ut
 import StickyNote from './StickyNote';
 import Sidebar from './Sidebar';
 import FlowVisualization from './FlowVisualization';
+import ApiRoutesVisualization from './ApiRoutesVisualization';
 import CenterUploadArea from './CenterUploadArea';
 
 // Register custom node types
@@ -42,10 +43,17 @@ export default function ProjectVisualization() {
   const [flowLoading, setFlowLoading] = useState(false);
   const [flowLayoutTrigger, setFlowLayoutTrigger] = useState(0);
 
+  // API routes state
+  const [apiRoutesData, setApiRoutesData] = useState(null);
+  const [isAnalyzingRoutes, setIsAnalyzingRoutes] = useState(false);
+  const [apiRoutesLoading, setApiRoutesLoading] = useState(false);
+  const [apiRoutesLayoutTrigger, setApiRoutesLayoutTrigger] = useState(0);
+
   // Project status and upload area state
   const [projectStatus, setProjectStatus] = useState({
     has_database_schema: false,
     has_runtime_flow: false,
+    has_api_routes: false,
     last_upload_date: null
   });
   const [showUploadArea, setShowUploadArea] = useState(false);
@@ -101,18 +109,27 @@ export default function ProjectVisualization() {
     }
   }, [activeView, project]);
 
+  // Load API routes data when switching to api view
+  useEffect(() => {
+    if (activeView === 'api' && !apiRoutesData && project) {
+      loadApiRoutesData();
+    }
+  }, [activeView, project]);
+
   // Determine if upload area should be shown
   useEffect(() => {
     console.log('[DEBUG] Checking if upload area should show:', {
       activeView,
       projectStatus,
       has_database_schema: projectStatus.has_database_schema,
-      has_runtime_flow: projectStatus.has_runtime_flow
+      has_runtime_flow: projectStatus.has_runtime_flow,
+      has_api_routes: projectStatus.has_api_routes
     });
 
     const shouldShow =
       (activeView === 'schema' && !projectStatus.has_database_schema) ||
-      (activeView === 'flow' && !projectStatus.has_runtime_flow);
+      (activeView === 'flow' && !projectStatus.has_runtime_flow) ||
+      (activeView === 'api' && !projectStatus.has_api_routes);
 
     console.log('[DEBUG] showUploadArea will be set to:', shouldShow);
     setShowUploadArea(shouldShow);
@@ -373,6 +390,7 @@ export default function ProjectVisualization() {
   const handleQuickOrganize = async () => {
     if (activeView === 'schema' && nodes.length === 0) return;
     if (activeView === 'flow' && !runtimeFlowData) return;
+    if (activeView === 'api' && !apiRoutesData) return;
 
     setIsLayouting(true);
 
@@ -394,6 +412,11 @@ export default function ProjectVisualization() {
     } else if (activeView === 'flow') {
       // Trigger re-layout in FlowVisualization component
       setFlowLayoutTrigger(prev => prev + 1);
+      setTimeout(() => setIsLayouting(false), 300);
+      toast.success('Layout organized!');
+    } else if (activeView === 'api') {
+      // Trigger re-layout in ApiRoutesVisualization component
+      setApiRoutesLayoutTrigger(prev => prev + 1);
       setTimeout(() => setIsLayouting(false), 300);
       toast.success('Layout organized!');
     }
@@ -523,6 +546,42 @@ export default function ProjectVisualization() {
     }
   };
 
+  const loadApiRoutesData = async () => {
+    if (apiRoutesLoading) return;
+
+    setApiRoutesLoading(true);
+    try {
+      const response = await api.get(`/projects/${projectId}/api-routes`);
+      setApiRoutesData(response.data.routes);
+    } catch (error) {
+      if (error.response?.status === 404) {
+        // No analysis exists yet - this is expected
+        console.log('No API routes analysis found');
+      } else {
+        console.error('Failed to load API routes:', error);
+      }
+    } finally {
+      setApiRoutesLoading(false);
+    }
+  };
+
+  const handleAnalyzeApiRoutes = async () => {
+    setIsAnalyzingRoutes(true);
+    try {
+      const response = await api.post(`/projects/${projectId}/analyze/api-routes`);
+      setApiRoutesData(response.data.routes);
+      // Update project status
+      setProjectStatus(prev => ({ ...prev, has_api_routes: true }));
+      toast.success('API routes analysis completed');
+    } catch (error) {
+      const errorMsg = error.response?.data?.error || 'Failed to analyze API routes';
+      toast.error(errorMsg);
+      console.error('API routes analysis error:', error);
+    } finally {
+      setIsAnalyzingRoutes(false);
+    }
+  };
+
   const handleUploadComplete = async (result) => {
     // Update project status
     if (result.project_status) {
@@ -592,8 +651,34 @@ export default function ProjectVisualization() {
             </button>
           )}
 
-          {/* Layout Controls - Show for both schema and flow views */}
-          {((activeView === 'schema' && nodes.length > 0) || (activeView === 'flow' && runtimeFlowData)) && (
+          {/* API Routes Analysis Button */}
+          {activeView === 'api' && (
+            <button
+              onClick={handleAnalyzeApiRoutes}
+              disabled={isAnalyzingRoutes}
+              className="px-4 py-2 bg-teal-600 dark:bg-teal-700 text-white rounded hover:bg-teal-700 dark:hover:bg-teal-800 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            >
+              {isAnalyzingRoutes ? (
+                <>
+                  <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                  Analyzing...
+                </>
+              ) : (
+                <>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+                  </svg>
+                  Analyze API Routes
+                </>
+              )}
+            </button>
+          )}
+
+          {/* Layout Controls - Show for schema, flow, and api views */}
+          {((activeView === 'schema' && nodes.length > 0) || (activeView === 'flow' && runtimeFlowData) || (activeView === 'api' && apiRoutesData)) && (
             <>
               <button
                 onClick={handleQuickOrganize}
@@ -774,7 +859,27 @@ export default function ProjectVisualization() {
               </>
             )}
 
-            {activeView !== 'schema' && activeView !== 'flow' && (
+            {activeView === 'api' && (
+              <>
+                {showUploadArea ? (
+                  <CenterUploadArea
+                    projectId={projectId}
+                    analysisType="api_routes"
+                    onUploadComplete={handleUploadComplete}
+                  />
+                ) : (
+                  <ApiRoutesVisualization
+                    routesData={apiRoutesData}
+                    isDark={isDark}
+                    onToggleTheme={toggleTheme}
+                    layoutTrigger={apiRoutesLayoutTrigger}
+                    projectId={projectId}
+                  />
+                )}
+              </>
+            )}
+
+            {activeView !== 'schema' && activeView !== 'flow' && activeView !== 'api' && (
               <div className="flex items-center justify-center h-full">
                 <div className="text-center">
                   <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">

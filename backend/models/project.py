@@ -1,7 +1,8 @@
 class Project:
     def __init__(self, id, user_id, name, description, source_type, git_url,
                  file_path, language, framework, created_at, updated_at,
-                 has_database_schema=False, has_runtime_flow=False, last_upload_date=None):
+                 has_database_schema=False, has_runtime_flow=False, has_api_routes=False,
+                 last_upload_date=None):
         self.id = id
         self.user_id = user_id
         self.name = name
@@ -13,6 +14,7 @@ class Project:
         self.framework = framework
         self.has_database_schema = has_database_schema
         self.has_runtime_flow = has_runtime_flow
+        self.has_api_routes = has_api_routes
         self.last_upload_date = last_upload_date
         self.created_at = created_at
         self.updated_at = updated_at
@@ -36,6 +38,7 @@ class Project:
             'framework': self.framework,
             'has_database_schema': self.has_database_schema,
             'has_runtime_flow': self.has_runtime_flow,
+            'has_api_routes': self.has_api_routes,
             'last_upload_date': last_upload_date,
             'created_at': created_at,
             'updated_at': updated_at
