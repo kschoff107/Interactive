@@ -38,6 +38,7 @@ export const projectsAPI = {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
   },
+  getFiles: (id) => api.get(`/projects/${id}/files`),
   // Layout endpoints
   getLayout: (id) => api.get(`/projects/${id}/layout`),
   saveLayout: (id, layoutData) =>

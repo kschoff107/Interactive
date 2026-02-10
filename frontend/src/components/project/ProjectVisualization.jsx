@@ -754,7 +754,7 @@ export default function ProjectVisualization() {
       {/* Main Content with Sidebar */}
       <div className="flex-1 flex overflow-hidden">
         {/* Sidebar */}
-        <Sidebar activeView={activeView} onViewChange={setActiveView} />
+        <Sidebar activeView={activeView} onViewChange={setActiveView} project={project} />
 
         {/* Visualization Area */}
         <div className="flex-1 flex flex-col">

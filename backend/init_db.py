@@ -135,6 +135,7 @@ def init_postgres_database(db_url):
             "ALTER TABLE projects ADD COLUMN IF NOT EXISTS has_runtime_flow BOOLEAN DEFAULT FALSE;",
             "ALTER TABLE projects ADD COLUMN IF NOT EXISTS has_api_routes BOOLEAN DEFAULT FALSE;",
             "ALTER TABLE projects ADD COLUMN IF NOT EXISTS last_upload_date TIMESTAMP;",
+            "ALTER TABLE projects ADD COLUMN IF NOT EXISTS git_branch VARCHAR(100);",
         ]
 
         for migration in migrations:

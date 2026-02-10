@@ -1,4 +1,5 @@
 import React from 'react';
+import SourceFilesPanel from './SourceFilesPanel';
 
 const navigationItems = [
   {
@@ -43,7 +44,7 @@ const navigationItems = [
   },
 ];
 
-export default function Sidebar({ activeView, onViewChange }) {
+export default function Sidebar({ activeView, onViewChange, project }) {
   const handleItemClick = (item) => {
     if (!item.disabled && onViewChange) {
       onViewChange(item.id);
@@ -105,6 +106,9 @@ export default function Sidebar({ activeView, onViewChange }) {
           );
         })}
       </nav>
+
+      {/* Source Files Panel (git-imported projects only) */}
+      <SourceFilesPanel project={project} />
 
       {/* Sidebar Footer */}
       <div className="px-4 py-3 border-t border-gray-200 dark:border-gray-700">

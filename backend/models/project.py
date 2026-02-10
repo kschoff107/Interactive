@@ -2,13 +2,14 @@ class Project:
     def __init__(self, id, user_id, name, description, source_type, git_url,
                  file_path, language, framework, created_at, updated_at,
                  has_database_schema=False, has_runtime_flow=False, has_api_routes=False,
-                 last_upload_date=None):
+                 last_upload_date=None, git_branch=None):
         self.id = id
         self.user_id = user_id
         self.name = name
         self.description = description
         self.source_type = source_type
         self.git_url = git_url
+        self.git_branch = git_branch
         self.file_path = file_path
         self.language = language
         self.framework = framework
@@ -33,6 +34,7 @@ class Project:
             'description': self.description,
             'source_type': self.source_type,
             'git_url': self.git_url,
+            'git_branch': self.git_branch,
             'file_path': self.file_path,
             'language': self.language,
             'framework': self.framework,

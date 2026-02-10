@@ -602,6 +602,71 @@ def save_workspace_layout(project_id):
 
 
 # ---------------------------------------------------------------------------
+# Project Files Endpoint
+# ---------------------------------------------------------------------------
+
+@projects_bp.route('/<int:project_id>/files', methods=['GET'])
+@jwt_required()
+def get_project_files(project_id):
+    """List all files stored on disk for a project.
+
+    Returns the same shape as the git tree endpoint so the frontend
+    buildFileTree() logic works for both:
+        {files: [{path, type, size}], total_count: int}
+    """
+    user_id = int(get_jwt_identity())
+
+    with get_connection() as conn:
+        cur = conn.cursor()
+
+        # Verify project ownership
+        cur.execute('SELECT * FROM projects WHERE id = %s AND user_id = %s',
+                    (project_id, user_id))
+        project_data = cur.fetchone()
+
+        if not project_data:
+            return jsonify({'error': 'Project not found'}), 404
+
+    file_path = project_data.get('file_path')
+
+    # No files on disk yet
+    if not file_path or not os.path.exists(file_path):
+        return jsonify({'files': [], 'total_count': 0}), 200
+
+    files = []
+    for dirpath, dirnames, filenames in os.walk(file_path):
+        # Build relative path and normalise separators for Windows
+        rel_dir = os.path.relpath(dirpath, file_path)
+        if rel_dir == '.':
+            rel_dir = ''
+
+        for fname in filenames:
+            full = os.path.join(dirpath, fname)
+            rel = os.path.join(rel_dir, fname) if rel_dir else fname
+            # Normalise Windows backslashes to forward slashes
+            rel = rel.replace('\\', '/')
+
+            try:
+                size = os.path.getsize(full)
+            except OSError:
+                size = 0
+
+            files.append({
+                'path': rel,
+                'type': 'file',
+                'size': size
+            })
+
+    # Sort alphabetically for consistent output
+    files.sort(key=lambda f: f['path'])
+
+    return jsonify({
+        'files': files,
+        'total_count': len(files)
+    }), 200
+
+
+# ---------------------------------------------------------------------------
 # Git Import Endpoints
 # ---------------------------------------------------------------------------
 
@@ -693,9 +758,10 @@ def import_from_git(project_id):
         # Update project metadata
         cur.execute('''
             UPDATE projects
-            SET file_path = %s, git_url = %s, source_type = %s, last_upload_date = %s
+            SET file_path = %s, git_url = %s, source_type = %s,
+                git_branch = %s, last_upload_date = %s
             WHERE id = %s
-        ''', (upload_dir, url, 'git', datetime.now(), project_id))
+        ''', (upload_dir, url, 'git', branch, datetime.now(), project_id))
 
         # Run analysis (same flow as file upload)
         response_data = {
