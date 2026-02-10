@@ -1,6 +1,6 @@
 # Code Visualizer - Design Document
 
-**Date:** February 4, 2026 (Updated: February 9, 2026)
+**Date:** February 4, 2026 (Updated: February 10, 2026)
 **Project:** Visual Backend Code Analyzer
 **Architecture:** Monolithic Flask App with Modular Parsers
 **Status:** MVP Deployed on Render
@@ -22,6 +22,11 @@
 - ✅ Runtime Flow parser (AST-based function/call analysis)
 - ✅ Flask Routes parser (API routes, blueprints, auth decorators)
 - ✅ AI-powered code analysis with Claude API
+- ✅ GitHub API-based repository import (no full cloning)
+- ✅ Git API service with URL parsing, tree fetching, selective file download
+- ✅ `git_branch` persistence on import
+- ✅ `GET /projects/<id>/files` endpoint for listing project files on disk
+- ✅ Security: path traversal prevention, URL validation (github.com only), file size/count limits
 
 **Frontend (React):**
 - ✅ Authentication pages (Login/Register)
@@ -37,6 +42,8 @@
 - ✅ API Routes visualization with BlueprintNode and RouteNode (method badges, auth indicators)
 - ✅ Sidebar navigation between visualization types
 - ✅ "Decode This" insight guide with AI-powered code analysis
+- ✅ GitHub Import modal with file browser, checkbox selection, quick-select by extension
+- ✅ Source Files panel in sidebar (git-imported projects) — full repo tree from GitHub API, clickable repo link, branch badge
 
 **Deployment:**
 - ✅ Deployed on Render (https://interactive-frontend.onrender.com)
@@ -55,11 +62,10 @@
 
 ### 🚧 In Progress / Planned
 
-- ⏳ Git repository cloning
 - ⏳ Additional language parsers (TypeScript, JavaScript)
 - ⏳ Export functionality (PNG, SVG, PDF)
 - ⏳ Advanced filtering and search
-- ⏳ Auto-layout algorithm
+- ⏳ Private Git repository support (OAuth)
 
 ### 📊 Current Architecture
 
@@ -168,9 +174,14 @@ CREATE TABLE projects (
     description TEXT,
     source_type VARCHAR(20) NOT NULL, -- 'upload' or 'git'
     git_url VARCHAR(500),  -- if source_type='git'
+    git_branch VARCHAR(100), -- branch used for git import
     file_path VARCHAR(500), -- local storage path
     language VARCHAR(50),  -- detected: 'python', 'typescript', etc.
     framework VARCHAR(50), -- detected: 'sqlalchemy', 'prisma', etc.
+    has_database_schema BOOLEAN DEFAULT FALSE,
+    has_runtime_flow BOOLEAN DEFAULT FALSE,
+    has_api_routes BOOLEAN DEFAULT FALSE,
+    last_upload_date TIMESTAMP,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -404,14 +415,19 @@ src/
 │   │   ├── Login.jsx
 │   │   └── Register.jsx
 │   ├── dashboard/
-│   │   └── Dashboard.jsx          # ✅ Implemented with dark mode
+│   │   ├── Dashboard.jsx          # ✅ Implemented with dark mode
+│   │   └── GitImportModal.jsx     # ✅ GitHub file browser & import
 │   ├── project/
 │   │   ├── ProjectUpload.jsx      # ✅ File upload UI
-│   │   └── ProjectVisualization.jsx # ✅ React Flow workspace
+│   │   ├── ProjectVisualization.jsx # ✅ React Flow workspace
+│   │   ├── Sidebar.jsx            # ✅ Visualization nav + Source panel
+│   │   ├── SourceFilesPanel.jsx   # ✅ GitHub repo tree in sidebar
+│   │   ├── FlowVisualization.jsx  # ✅ Runtime flow view
+│   │   └── ApiRoutesVisualization.jsx # ✅ API routes view
 │   └── common/
 │       └── ProtectedRoute.jsx     # ✅ Auth guard
 ├── services/
-│   └── api.js                     # ✅ Axios instance with JWT
+│   └── api.js                     # ✅ Axios instance with JWT + gitAPI
 ├── context/
 │   ├── AuthContext.jsx            # ✅ User auth state
 │   └── ThemeContext.jsx           # ✅ Light/Dark mode state
@@ -821,11 +837,14 @@ code-visualizer/
 ├── backend/
 │   ├── app.py
 │   ├── config.py
+│   ├── init_db.py
 │   ├── requirements.txt
 │   ├── models/
 │   ├── routes/
 │   ├── parsers/
 │   ├── services/
+│   │   ├── code_analysis_service.py  # AI-powered analysis
+│   │   └── git_api_service.py        # GitHub API integration
 │   └── tests/
 ├── frontend/
 │   ├── public/
@@ -865,12 +884,13 @@ code-visualizer/
 11. ✅ **Runtime Flow visualization** (AST-based function/call graph)
 12. ✅ **AI-powered code analysis** with Claude API ("Decode This" feature)
 13. ✅ **API Routes visualization** (Flask routes parser with blueprints, methods, auth detection)
+14. ✅ **GitHub repository import** (API-based, selective file download — no full cloning)
+15. ✅ **Source Files panel** in project sidebar (full repo tree, branch badge, clickable repo link)
 
 ## Next Steps
 
 1. **Add export functionality** (PNG, SVG, PDF, Markdown)
-2. **Implement Git repository cloning** (currently upload-only)
-3. **Build additional parsers:**
+2. **Build additional parsers:**
    - Django ORM parser
    - Prisma parser (TypeScript)
    - TypeORM parser
@@ -915,7 +935,10 @@ code-visualizer/
   - Map business processes to code implementation
   - Export to BPMN XML format
   - Use cases: Document workflows, map business logic to code, process improvement, compliance documentation
-- Private Git repository support (OAuth)
+- Private Git repository support (GitHub OAuth for higher API rate limits)
+- GitLab and Bitbucket repository support
+- Branch selection dropdown in import modal
+- "Re-import" button to refresh files from repo
 - Collaborative workspaces (multi-user)
 - Real-time collaboration on diagrams
 - More language/framework support
