@@ -10,7 +10,7 @@ import ReactFlow, {
   addEdge,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
-import api, { projectsAPI } from '../../services/api';
+import api, { projectsAPI, workspacesAPI } from '../../services/api';
 import { toast } from 'react-toastify';
 import { useTheme } from '../../context/ThemeContext';
 import { getLayoutedElements, serializeLayout, applySavedLayout } from '../../utils/layoutUtils';
@@ -58,6 +58,10 @@ export default function ProjectVisualization() {
   });
   const [showUploadArea, setShowUploadArea] = useState(false);
 
+  // Workspace state
+  const [workspaces, setWorkspaces] = useState({});
+  const [activeWorkspaceId, setActiveWorkspaceId] = useState(null);
+
   // Layout state
   const [previousLayout, setPreviousLayout] = useState(null);
   const [isLayouting, setIsLayouting] = useState(false);
@@ -96,25 +100,128 @@ export default function ProjectVisualization() {
     }
   };
 
+  // Helper mappings
+  const viewToAnalysisType = (view) => {
+    const map = { schema: 'database_schema', flow: 'runtime_flow', api: 'api_routes' };
+    return map[view];
+  };
+  const analysisTypeToView = (at) => {
+    const map = { database_schema: 'schema', runtime_flow: 'flow', api_routes: 'api' };
+    return map[at];
+  };
+
+  // Load workspaces
+  const loadWorkspaces = async (selectView, selectWorkspaceId) => {
+    try {
+      const response = await workspacesAPI.list(projectId);
+      const ws = response.data.workspaces || {};
+      setWorkspaces(ws);
+
+      // If a specific workspace was requested, select it
+      if (selectWorkspaceId) {
+        setActiveWorkspaceId(selectWorkspaceId);
+        return;
+      }
+
+      // Auto-select first workspace of current (or requested) view
+      const view = selectView || activeView;
+      const at = viewToAnalysisType(view);
+      const viewWorkspaces = ws[at] || [];
+      if (viewWorkspaces.length > 0 && !activeWorkspaceId) {
+        setActiveWorkspaceId(viewWorkspaces[0].id);
+      }
+    } catch (error) {
+      console.error('Failed to load workspaces:', error);
+    }
+  };
+
+  // Workspace handlers
+  const handleWorkspaceSelect = (viewId, workspaceId) => {
+    // Clear cached data when switching workspaces
+    if (workspaceId !== activeWorkspaceId) {
+      setRuntimeFlowData(null);
+      setApiRoutesData(null);
+      setNodes([]);
+      setEdges([]);
+      setHasUnsavedChanges(false);
+      setLastSaved(null);
+    }
+    setActiveView(viewId);
+    setActiveWorkspaceId(workspaceId);
+  };
+
+  const handleWorkspaceCreate = async (analysisType) => {
+    try {
+      const response = await workspacesAPI.create(projectId, analysisType, '');
+      const newWs = response.data.workspace;
+      await loadWorkspaces(null, newWs.id);
+      // Switch to the new workspace
+      const viewId = analysisTypeToView(analysisType);
+      setActiveView(viewId);
+      setActiveWorkspaceId(newWs.id);
+      // Clear data for fresh workspace
+      setRuntimeFlowData(null);
+      setApiRoutesData(null);
+      setNodes([]);
+      setEdges([]);
+      setHasUnsavedChanges(false);
+      setLastSaved(null);
+      toast.success('Workspace created');
+    } catch (error) {
+      toast.error('Failed to create workspace');
+    }
+  };
+
+  const handleWorkspaceRename = async (workspaceId, newName) => {
+    try {
+      await workspacesAPI.rename(projectId, workspaceId, newName);
+      await loadWorkspaces();
+    } catch (error) {
+      toast.error('Failed to rename workspace');
+    }
+  };
+
+  const handleWorkspaceDelete = async (workspaceId) => {
+    try {
+      await workspacesAPI.delete(projectId, workspaceId);
+      // If deleting the active workspace, switch to another
+      if (workspaceId === activeWorkspaceId) {
+        const at = viewToAnalysisType(activeView);
+        const remaining = (workspaces[at] || []).filter(ws => ws.id !== workspaceId);
+        if (remaining.length > 0) {
+          setActiveWorkspaceId(remaining[0].id);
+          setRuntimeFlowData(null);
+          setApiRoutesData(null);
+          setNodes([]);
+          setEdges([]);
+        }
+      }
+      await loadWorkspaces();
+      toast.success('Workspace deleted');
+    } catch (error) {
+      const msg = error.response?.data?.error || 'Failed to delete workspace';
+      toast.error(msg);
+    }
+  };
+
   useEffect(() => {
     console.log('[DEBUG] Initial mount - loading project and status');
     loadProjectAndVisualization();
     fetchProjectStatus();
+    loadWorkspaces();
   }, [projectId]);
 
-  // Load runtime flow data when switching to flow view
+  // Load data when switching views or workspaces
   useEffect(() => {
-    if (activeView === 'flow' && !runtimeFlowData && project) {
+    if (!project || !activeWorkspaceId) return;
+    if (activeView === 'flow') {
       loadRuntimeFlowData();
-    }
-  }, [activeView, project]);
-
-  // Load API routes data when switching to api view
-  useEffect(() => {
-    if (activeView === 'api' && !apiRoutesData && project) {
+    } else if (activeView === 'api') {
       loadApiRoutesData();
+    } else if (activeView === 'schema') {
+      loadSchemaForWorkspace();
     }
-  }, [activeView, project]);
+  }, [activeView, activeWorkspaceId, project]);
 
   // Determine if upload area should be shown
   useEffect(() => {
@@ -444,7 +551,11 @@ export default function ProjectVisualization() {
     setIsSaving(true);
     try {
       const layoutData = serializeLayout(nodes);
-      await projectsAPI.saveLayout(projectId, layoutData);
+      if (activeWorkspaceId) {
+        await workspacesAPI.saveLayout(projectId, activeWorkspaceId, layoutData);
+      } else {
+        await projectsAPI.saveLayout(projectId, layoutData);
+      }
 
       setHasUnsavedChanges(false);
       setLastSaved(Date.now());
@@ -516,12 +627,14 @@ export default function ProjectVisualization() {
     if (flowLoading) return;
 
     setFlowLoading(true);
+    setRuntimeFlowData(null);
     try {
-      const response = await api.get(`/projects/${projectId}/runtime-flow`);
+      const response = activeWorkspaceId
+        ? await workspacesAPI.getRuntimeFlow(projectId, activeWorkspaceId)
+        : await api.get(`/projects/${projectId}/runtime-flow`);
       setRuntimeFlowData(response.data.flow);
     } catch (error) {
       if (error.response?.status === 404) {
-        // No analysis exists yet - this is expected
         console.log('No runtime flow analysis found');
       } else {
         console.error('Failed to load runtime flow:', error);
@@ -534,7 +647,9 @@ export default function ProjectVisualization() {
   const handleAnalyzeRuntimeFlow = async () => {
     setIsAnalyzing(true);
     try {
-      const response = await api.post(`/projects/${projectId}/analyze/runtime-flow`);
+      const response = activeWorkspaceId
+        ? await workspacesAPI.analyzeRuntimeFlow(projectId, activeWorkspaceId)
+        : await api.post(`/projects/${projectId}/analyze/runtime-flow`);
       setRuntimeFlowData(response.data.flow);
       toast.success('Runtime flow analysis completed');
     } catch (error) {
@@ -550,12 +665,14 @@ export default function ProjectVisualization() {
     if (apiRoutesLoading) return;
 
     setApiRoutesLoading(true);
+    setApiRoutesData(null);
     try {
-      const response = await api.get(`/projects/${projectId}/api-routes`);
+      const response = activeWorkspaceId
+        ? await workspacesAPI.getApiRoutes(projectId, activeWorkspaceId)
+        : await api.get(`/projects/${projectId}/api-routes`);
       setApiRoutesData(response.data.routes);
     } catch (error) {
       if (error.response?.status === 404) {
-        // No analysis exists yet - this is expected
         console.log('No API routes analysis found');
       } else {
         console.error('Failed to load API routes:', error);
@@ -568,9 +685,10 @@ export default function ProjectVisualization() {
   const handleAnalyzeApiRoutes = async () => {
     setIsAnalyzingRoutes(true);
     try {
-      const response = await api.post(`/projects/${projectId}/analyze/api-routes`);
+      const response = activeWorkspaceId
+        ? await workspacesAPI.analyzeApiRoutes(projectId, activeWorkspaceId)
+        : await api.post(`/projects/${projectId}/analyze/api-routes`);
       setApiRoutesData(response.data.routes);
-      // Update project status
       setProjectStatus(prev => ({ ...prev, has_api_routes: true }));
       toast.success('API routes analysis completed');
     } catch (error) {
@@ -579,6 +697,31 @@ export default function ProjectVisualization() {
       console.error('API routes analysis error:', error);
     } finally {
       setIsAnalyzingRoutes(false);
+    }
+  };
+
+  const loadSchemaForWorkspace = async () => {
+    if (!activeWorkspaceId) return;
+    try {
+      const analysisResponse = await workspacesAPI.getAnalysis(projectId, activeWorkspaceId);
+      const schema = analysisResponse.data.schema;
+
+      // Try to load workspace layout
+      try {
+        const layoutResponse = await workspacesAPI.getLayout(projectId, activeWorkspaceId);
+        if (layoutResponse.data.layout) {
+          createVisualizationWithLayout(schema, layoutResponse.data.layout.layout_data);
+          setLastSaved(new Date(layoutResponse.data.layout.updated_at).getTime());
+        } else {
+          createVisualizationFromSchema(schema);
+        }
+      } catch (layoutErr) {
+        createVisualizationFromSchema(schema);
+      }
+    } catch (err) {
+      if (err.response?.status === 404) {
+        createVisualizationNodes(project);
+      }
     }
   };
 
@@ -754,7 +897,17 @@ export default function ProjectVisualization() {
       {/* Main Content with Sidebar */}
       <div className="flex-1 flex overflow-hidden">
         {/* Sidebar */}
-        <Sidebar activeView={activeView} onViewChange={setActiveView} project={project} />
+        <Sidebar
+          activeView={activeView}
+          onViewChange={setActiveView}
+          project={project}
+          workspaces={workspaces}
+          activeWorkspaceId={activeWorkspaceId}
+          onWorkspaceSelect={handleWorkspaceSelect}
+          onWorkspaceCreate={handleWorkspaceCreate}
+          onWorkspaceRename={handleWorkspaceRename}
+          onWorkspaceDelete={handleWorkspaceDelete}
+        />
 
         {/* Visualization Area */}
         <div className="flex-1 flex flex-col">

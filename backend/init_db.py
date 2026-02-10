@@ -118,6 +118,20 @@ def init_postgres_database(db_url):
             );
         """)
 
+        # Create workspaces table
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS workspaces (
+                id SERIAL PRIMARY KEY,
+                project_id INTEGER NOT NULL,
+                analysis_type VARCHAR(50) NOT NULL,
+                name VARCHAR(200) NOT NULL,
+                sort_order INTEGER DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+            );
+        """)
+
         # Create indexes for performance
         cur.execute("CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);")
@@ -127,6 +141,7 @@ def init_postgres_database(db_url):
         cur.execute("CREATE INDEX IF NOT EXISTS idx_workspace_layouts_project_id ON workspace_layouts(project_id);")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_code_analysis_lookup ON code_analysis(project_id, file_hash);")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_code_analysis_expires ON code_analysis(expires_at);")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_workspaces_project_type ON workspaces(project_id, analysis_type);")
 
         # Add missing columns to existing tables (migrations for existing deployments)
         # Each migration in its own try/except to handle partial schema states
@@ -136,6 +151,9 @@ def init_postgres_database(db_url):
             "ALTER TABLE projects ADD COLUMN IF NOT EXISTS has_api_routes BOOLEAN DEFAULT FALSE;",
             "ALTER TABLE projects ADD COLUMN IF NOT EXISTS last_upload_date TIMESTAMP;",
             "ALTER TABLE projects ADD COLUMN IF NOT EXISTS git_branch VARCHAR(100);",
+            "ALTER TABLE analysis_results ADD COLUMN IF NOT EXISTS workspace_id INTEGER REFERENCES workspaces(id) ON DELETE SET NULL;",
+            "ALTER TABLE workspace_layouts ADD COLUMN IF NOT EXISTS workspace_id INTEGER REFERENCES workspaces(id) ON DELETE SET NULL;",
+            "ALTER TABLE workspace_notes ADD COLUMN IF NOT EXISTS workspace_id INTEGER REFERENCES workspaces(id) ON DELETE SET NULL;",
         ]
 
         for migration in migrations:
@@ -266,6 +284,20 @@ def init_sqlite_database(db_url):
             );
         """)
 
+        # Create workspaces table
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS workspaces (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                project_id INTEGER NOT NULL,
+                analysis_type VARCHAR(50) NOT NULL,
+                name VARCHAR(200) NOT NULL,
+                sort_order INTEGER DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+            );
+        """)
+
         # Create indexes for performance
         cur.execute("CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);")
@@ -275,6 +307,19 @@ def init_sqlite_database(db_url):
         cur.execute("CREATE INDEX IF NOT EXISTS idx_workspace_layouts_project_id ON workspace_layouts(project_id);")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_code_analysis_lookup ON code_analysis(project_id, file_hash);")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_code_analysis_expires ON code_analysis(expires_at);")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_workspaces_project_type ON workspaces(project_id, analysis_type);")
+
+        # Add workspace_id columns to existing tables (SQLite migration)
+        sqlite_migrations = [
+            ("analysis_results", "workspace_id", "INTEGER"),
+            ("workspace_layouts", "workspace_id", "INTEGER"),
+            ("workspace_notes", "workspace_id", "INTEGER"),
+        ]
+        for table, column, col_type in sqlite_migrations:
+            try:
+                cur.execute(f"ALTER TABLE {table} ADD COLUMN {column} {col_type};")
+            except Exception:
+                pass  # Column already exists
 
         conn.commit()
         print(f"SQLite database initialized successfully at: {db_path}")

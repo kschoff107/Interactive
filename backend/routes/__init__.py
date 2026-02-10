@@ -5,7 +5,9 @@ def init_routes(app):
     from .auth import auth_bp
     from .projects import projects_bp
     from .analysis_routes import analysis_bp
+    from .workspace_routes import workspaces_bp
 
     app.register_blueprint(auth_bp, url_prefix='/api/auth')
     app.register_blueprint(projects_bp, url_prefix='/api/projects')
     app.register_blueprint(analysis_bp, url_prefix='/api/projects')
+    app.register_blueprint(workspaces_bp, url_prefix='/api/projects')

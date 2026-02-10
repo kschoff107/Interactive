@@ -1,11 +1,12 @@
 class WorkspaceLayout:
-    def __init__(self, id, project_id, analysis_type, layout_data, created_at, updated_at):
+    def __init__(self, id, project_id, analysis_type, layout_data, created_at, updated_at, workspace_id=None):
         self.id = id
         self.project_id = project_id
         self.analysis_type = analysis_type
         self.layout_data = layout_data
         self.created_at = created_at
         self.updated_at = updated_at
+        self.workspace_id = workspace_id
 
     def to_dict(self):
         """Convert to dictionary"""
@@ -15,5 +16,6 @@ class WorkspaceLayout:
             'analysis_type': self.analysis_type,
             'layout_data': self.layout_data,
             'created_at': self.created_at.isoformat() if self.created_at else None,
-            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+            'workspace_id': self.workspace_id
         }

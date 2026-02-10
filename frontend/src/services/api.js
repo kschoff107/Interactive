@@ -45,6 +45,31 @@ export const projectsAPI = {
     api.post(`/projects/${id}/layout`, { layout_data: layoutData }),
 };
 
+// Workspace endpoints
+export const workspacesAPI = {
+  list: (projectId) => api.get(`/projects/${projectId}/workspaces`),
+  create: (projectId, analysisType, name) =>
+    api.post(`/projects/${projectId}/workspaces`, { analysis_type: analysisType, name }),
+  rename: (projectId, workspaceId, name) =>
+    api.patch(`/projects/${projectId}/workspaces/${workspaceId}`, { name }),
+  delete: (projectId, workspaceId) =>
+    api.delete(`/projects/${projectId}/workspaces/${workspaceId}`),
+  getLayout: (projectId, workspaceId) =>
+    api.get(`/projects/${projectId}/workspaces/${workspaceId}/layout`),
+  saveLayout: (projectId, workspaceId, layoutData) =>
+    api.post(`/projects/${projectId}/workspaces/${workspaceId}/layout`, { layout_data: layoutData }),
+  getRuntimeFlow: (projectId, workspaceId) =>
+    api.get(`/projects/${projectId}/workspaces/${workspaceId}/runtime-flow`),
+  analyzeRuntimeFlow: (projectId, workspaceId) =>
+    api.post(`/projects/${projectId}/workspaces/${workspaceId}/analyze/runtime-flow`),
+  getApiRoutes: (projectId, workspaceId) =>
+    api.get(`/projects/${projectId}/workspaces/${workspaceId}/api-routes`),
+  analyzeApiRoutes: (projectId, workspaceId) =>
+    api.post(`/projects/${projectId}/workspaces/${workspaceId}/analyze/api-routes`),
+  getAnalysis: (projectId, workspaceId) =>
+    api.get(`/projects/${projectId}/workspaces/${workspaceId}/analysis`),
+};
+
 // Git import endpoints
 export const gitAPI = {
   getTree: (url) =>
