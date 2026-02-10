@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import ReactFlow, {
   MiniMap,
@@ -60,6 +60,13 @@ export default function ProjectVisualization() {
   // Workspace state
   const [workspaces, setWorkspaces] = useState({});
   const [activeWorkspaceId, setActiveWorkspaceId] = useState(null);
+
+  // Refs to store child component nodes for layout save
+  const flowNodesRef = useRef([]);
+  const apiNodesRef = useRef([]);
+
+  // Saved layout for flow/api views
+  const [workspaceLayout, setWorkspaceLayout] = useState(null);
 
   // Layout state
   const [previousLayout, setPreviousLayout] = useState(null);
@@ -262,13 +269,31 @@ export default function ProjectVisualization() {
     loadWorkspaces();
   }, [projectId]);
 
+  // Load saved workspace layout for flow/api views
+  const loadWorkspaceLayout = async () => {
+    if (!activeWorkspaceId) { setWorkspaceLayout(null); return; }
+    try {
+      const response = await workspacesAPI.getLayout(projectId, activeWorkspaceId);
+      if (response.data.layout) {
+        setWorkspaceLayout(response.data.layout.layout_data);
+        setLastSaved(new Date(response.data.layout.updated_at).getTime());
+      } else {
+        setWorkspaceLayout(null);
+      }
+    } catch {
+      setWorkspaceLayout(null);
+    }
+  };
+
   // Load data when switching views or workspaces
   useEffect(() => {
     if (!project || !activeWorkspaceId) return;
     if (activeView === 'flow') {
       loadRuntimeFlowData();
+      loadWorkspaceLayout();
     } else if (activeView === 'api') {
       loadApiRoutesData();
+      loadWorkspaceLayout();
     } else if (activeView === 'schema') {
       loadSchemaForWorkspace();
     }
@@ -589,11 +614,19 @@ export default function ProjectVisualization() {
   };
 
   const handleSaveLayout = async () => {
-    if (nodes.length === 0) return;
+    let layoutNodes;
+    if (activeView === 'flow') {
+      layoutNodes = flowNodesRef.current;
+    } else if (activeView === 'api') {
+      layoutNodes = apiNodesRef.current;
+    } else {
+      layoutNodes = nodes;
+    }
+    if (!layoutNodes || layoutNodes.length === 0) return;
 
     setIsSaving(true);
     try {
-      const layoutData = serializeLayout(nodes);
+      const layoutData = serializeLayout(layoutNodes);
       if (activeWorkspaceId) {
         await workspacesAPI.saveLayout(projectId, activeWorkspaceId, layoutData);
       } else {
@@ -1061,6 +1094,9 @@ export default function ProjectVisualization() {
                     onToggleTheme={toggleTheme}
                     layoutTrigger={flowLayoutTrigger}
                     projectId={projectId}
+                    savedLayout={workspaceLayout}
+                    onNodesUpdate={(n) => { flowNodesRef.current = n; }}
+                    onNodesDragged={() => setHasUnsavedChanges(true)}
                   />
                 )}
               </>
@@ -1082,6 +1118,9 @@ export default function ProjectVisualization() {
                     onToggleTheme={toggleTheme}
                     layoutTrigger={apiRoutesLayoutTrigger}
                     projectId={projectId}
+                    savedLayout={workspaceLayout}
+                    onNodesUpdate={(n) => { apiNodesRef.current = n; }}
+                    onNodesDragged={() => setHasUnsavedChanges(true)}
                   />
                 )}
               </>

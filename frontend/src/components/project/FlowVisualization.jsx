@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import ReactFlow, {
   MiniMap,
   Controls,
@@ -95,12 +95,24 @@ const getLayoutedFlowElements = (nodes, edges, direction = 'TB') => {
   return { nodes: layoutedNodes, edges: layoutedEdges };
 };
 
-export default function FlowVisualization({ flowData, isDark, onToggleTheme, layoutTrigger, projectId }) {
-  const [nodes, setNodes, onNodesChange] = useNodesState([]);
+export default function FlowVisualization({ flowData, isDark, onToggleTheme, layoutTrigger, projectId, savedLayout, onNodesUpdate, onNodesDragged }) {
+  const [nodes, setNodes, onNodesChangeBase] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const [initialNodes, setInitialNodes] = useState([]);
   const [initialEdges, setInitialEdges] = useState([]);
   const [showInsightGuide, setShowInsightGuide] = useState(false);
+
+  // Wrap onNodesChange to detect drag completions
+  const onNodesChange = useCallback((changes) => {
+    onNodesChangeBase(changes);
+    const hasDragEnd = changes.some(c => c.type === 'position' && c.dragging === false);
+    if (hasDragEnd && onNodesDragged) onNodesDragged();
+  }, [onNodesChangeBase, onNodesDragged]);
+
+  // Report nodes to parent whenever they change
+  useEffect(() => {
+    if (onNodesUpdate) onNodesUpdate(nodes);
+  }, [nodes, onNodesUpdate]);
 
   // Transform and layout flow data on initial load
   useEffect(() => {
@@ -112,14 +124,26 @@ export default function FlowVisualization({ flowData, isDark, onToggleTheme, lay
           flowNodes,
           flowEdges
         );
-        setNodes(layoutedNodes);
+
+        // Apply saved layout positions if available
+        let finalNodes = layoutedNodes;
+        if (savedLayout && savedLayout.nodes) {
+          const positionMap = new Map();
+          savedLayout.nodes.forEach(n => positionMap.set(n.id, n.position));
+          finalNodes = layoutedNodes.map(node => {
+            const savedPos = positionMap.get(node.id);
+            return savedPos ? { ...node, position: savedPos } : node;
+          });
+        }
+
+        setNodes(finalNodes);
         setEdges(layoutedEdges);
         // Store initial state for re-layout
         setInitialNodes(flowNodes);
         setInitialEdges(flowEdges);
       }
     }
-  }, [flowData, setNodes, setEdges]);
+  }, [flowData, savedLayout, setNodes, setEdges]);
 
   // Re-layout when layoutTrigger changes
   useEffect(() => {
