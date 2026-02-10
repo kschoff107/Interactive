@@ -68,6 +68,18 @@ export const workspacesAPI = {
     api.post(`/projects/${projectId}/workspaces/${workspaceId}/analyze/api-routes`),
   getAnalysis: (projectId, workspaceId) =>
     api.get(`/projects/${projectId}/workspaces/${workspaceId}/analysis`),
+  // Workspace file management
+  uploadFiles: (projectId, workspaceId, files) => {
+    const formData = new FormData();
+    files.forEach((file) => formData.append('files', file));
+    return api.post(`/projects/${projectId}/workspaces/${workspaceId}/upload`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+  },
+  listFiles: (projectId, workspaceId) =>
+    api.get(`/projects/${projectId}/workspaces/${workspaceId}/files`),
+  deleteFile: (projectId, workspaceId, fileId) =>
+    api.delete(`/projects/${projectId}/workspaces/${workspaceId}/files/${fileId}`),
 };
 
 // Git import endpoints

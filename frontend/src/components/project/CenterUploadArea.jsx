@@ -1,29 +1,21 @@
 import React, { useState, useCallback } from 'react';
 import { useDropzone } from 'react-dropzone';
-import api from '../../services/api';
+import { workspacesAPI } from '../../services/api';
 import './CenterUploadArea.css';
 
-const CenterUploadArea = ({ projectId, analysisType, onUploadComplete }) => {
+const CenterUploadArea = ({ projectId, workspaceId, analysisType, onUploadComplete, onAnalyze, hasSourceFiles }) => {
   const [uploading, setUploading] = useState(false);
   const [uploadStatus, setUploadStatus] = useState(null);
 
   const onDrop = useCallback(async (acceptedFiles) => {
     if (acceptedFiles.length === 0) return;
+    if (!workspaceId) return;
 
     setUploading(true);
     setUploadStatus(null);
 
-    const formData = new FormData();
-    acceptedFiles.forEach(file => {
-      formData.append('files', file);
-    });
-    formData.append('file_type', analysisType);
-
     try {
-      const response = await api.post(`/projects/${projectId}/upload`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
-
+      const response = await workspacesAPI.uploadFiles(projectId, workspaceId, acceptedFiles);
       const result = response.data;
 
       if (result.message) {
@@ -51,26 +43,35 @@ const CenterUploadArea = ({ projectId, analysisType, onUploadComplete }) => {
     } finally {
       setUploading(false);
     }
-  }, [projectId, analysisType, onUploadComplete]);
+  }, [projectId, workspaceId, onUploadComplete]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
-    disabled: uploading
+    disabled: uploading || !workspaceId
   });
 
   const getAnalysisTypeDisplay = () => {
     const types = {
       'database_schema': {
-        title: 'Upload Database Schema Files',
-        description: 'Upload SQLAlchemy models (.py) or SQLite database (.db, .sqlite) files',
+        title: 'Database Schema',
+        description: 'Upload SQLAlchemy models or database files to visualize your schema',
         icon: '🗄️',
-        acceptedFiles: '.py, .db, .sqlite, .sqlite3'
+        acceptedFiles: '.py, .db, .sqlite, .sqlite3',
+        analyzeLabel: 'Analyze Database Schema',
       },
       'runtime_flow': {
-        title: 'Upload Runtime Flow Files',
-        description: 'Upload Python source files (.py) to analyze runtime execution flow',
+        title: 'Runtime Flow',
+        description: 'Upload Python source files to visualize runtime execution flow',
         icon: '🔄',
-        acceptedFiles: '.py'
+        acceptedFiles: '.py',
+        analyzeLabel: 'Analyze Runtime Flow',
+      },
+      'api_routes': {
+        title: 'API Routes',
+        description: 'Upload Python source files to visualize API endpoints and routes',
+        icon: '🌐',
+        acceptedFiles: '.py',
+        analyzeLabel: 'Analyze API Routes',
       }
     };
     return types[analysisType] || types['database_schema'];
@@ -80,53 +81,59 @@ const CenterUploadArea = ({ projectId, analysisType, onUploadComplete }) => {
 
   return (
     <div className="center-upload-area">
-      <div
-        {...getRootProps()}
-        className={`upload-dropzone ${isDragActive ? 'drag-active' : ''} ${uploading ? 'uploading' : ''}`}
-      >
-        <input {...getInputProps()} />
+      <div className="flex flex-col items-center justify-center h-full gap-6 p-8">
+        <div className="text-5xl">{display.icon}</div>
+        <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
+          {display.title}
+        </h2>
+        <p className="text-sm text-gray-500 dark:text-gray-400 text-center max-w-md">
+          {display.description}
+        </p>
 
-        <div className="upload-icon">{display.icon}</div>
-        <h2>{display.title}</h2>
-        <p className="upload-description">{display.description}</p>
+        {/* Upload area */}
+        <div
+          {...getRootProps()}
+          className={`upload-dropzone ${isDragActive ? 'drag-active' : ''} ${uploading ? 'uploading' : ''}`}
+        >
+          <input {...getInputProps()} />
 
-        {!uploading && !uploadStatus && (
-          <>
-            <div className="upload-prompt">
-              {isDragActive ?
-                'Drop files here...' :
-                'Drag & drop files here, or click to select'
-              }
+          {!uploading && !uploadStatus && (
+            <>
+              <div className="upload-prompt">
+                {isDragActive ?
+                  'Drop files here...' :
+                  'Drag & drop files here, or click to select'
+                }
+              </div>
+              <button type="button" className="browse-button">Browse Files</button>
+              <p className="accepted-files">Accepted: {display.acceptedFiles}</p>
+            </>
+          )}
+
+          {uploading && (
+            <div className="upload-progress">
+              <div className="spinner"></div>
+              <p>Uploading files...</p>
             </div>
-            <button type="button" className="browse-button">Browse Files</button>
-            <p className="accepted-files">Accepted: {display.acceptedFiles}</p>
-          </>
-        )}
+          )}
 
-        {uploading && (
-          <div className="upload-progress">
-            <div className="spinner"></div>
-            <p>Uploading and analyzing files...</p>
-          </div>
-        )}
-
-        {uploadStatus && (
-          <div className={`upload-status ${uploadStatus.type}`}>
-            <p className="status-message">
-              {uploadStatus.type === 'success' ? '✓' : '✗'} {uploadStatus.message}
-            </p>
-            {uploadStatus.details && (
-              <ul className="upload-details">
-                {uploadStatus.details.map((item, idx) => (
-                  <li key={idx} className={item.status}>
-                    {item.filename} - {item.status}
-                    {item.reason && ` (${item.reason})`}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        )}
+          {uploadStatus && (
+            <div className={`upload-status ${uploadStatus.type}`}>
+              <p className="status-message">
+                {uploadStatus.type === 'success' ? '✓' : '✗'} {uploadStatus.message}
+              </p>
+              {uploadStatus.details && (
+                <ul className="upload-details">
+                  {uploadStatus.details.map((item, idx) => (
+                    <li key={idx} className={item.status}>
+                      {item.filename} - {item.status}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

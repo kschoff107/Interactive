@@ -1,8 +1,10 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from database import get_connection
+from werkzeug.utils import secure_filename
 import json
 import os
+import shutil
 from config import Config
 from parsers.parser_manager import ParserManager, UnsupportedFrameworkError
 
@@ -39,6 +41,14 @@ def get_or_create_default_workspace(cur, project_id, analysis_type):
         )
 
     return ws_id
+
+
+def get_workspace_file_dir(user_id, project_id, workspace_id):
+    """Get the file storage directory for a specific workspace."""
+    return os.path.join(
+        Config.STORAGE_PATH, 'uploads', str(user_id),
+        str(project_id), 'ws_' + str(workspace_id)
+    )
 
 
 def verify_project_ownership(cur, project_id, user_id):
@@ -86,6 +96,15 @@ def list_workspaces(project_id):
         )
         rows = cur.fetchall()
 
+        # Get file counts per workspace
+        file_counts = {}
+        for row in rows:
+            cur.execute(
+                'SELECT COUNT(*) as count FROM workspace_files WHERE workspace_id = %s',
+                (row['id'],)
+            )
+            file_counts[row['id']] = cur.fetchone()['count']
+
     # Group by analysis_type
     grouped = {}
     for row in rows:
@@ -97,6 +116,7 @@ def list_workspaces(project_id):
             'name': row['name'],
             'analysis_type': at,
             'sort_order': row['sort_order'],
+            'file_count': file_counts.get(row['id'], 0),
             'created_at': row['created_at'],
             'updated_at': row['updated_at'],
         })
@@ -152,6 +172,7 @@ def create_workspace(project_id):
             'analysis_type': analysis_type,
             'name': name,
             'sort_order': next_order,
+            'file_count': 0,
             'created_at': result['created_at'],
             'updated_at': result['updated_at'],
         }
@@ -197,7 +218,7 @@ def rename_workspace(project_id, workspace_id):
 @workspaces_bp.route('/<int:project_id>/workspaces/<int:workspace_id>', methods=['DELETE'])
 @jwt_required()
 def delete_workspace(project_id, workspace_id):
-    """Delete a workspace. Prevents deleting the last workspace of a type."""
+    """Delete a workspace and its associated data + files."""
     user_id = int(get_jwt_identity())
 
     with get_connection() as conn:
@@ -215,20 +236,156 @@ def delete_workspace(project_id, workspace_id):
         if not workspace:
             return jsonify({'error': 'Workspace not found'}), 404
 
-        # Check if this is the last workspace for this analysis_type
-        cur.execute(
-            '''SELECT COUNT(*) AS cnt FROM workspaces
-               WHERE project_id = %s AND analysis_type = %s''',
-            (project_id, workspace['analysis_type'])
-        )
-        count = cur.fetchone()['cnt']
-        if count <= 1:
-            return jsonify({'error': 'Cannot delete the last workspace'}), 400
+        # Clean up associated data
+        cur.execute('DELETE FROM workspace_files WHERE workspace_id = %s', (workspace_id,))
+        cur.execute('DELETE FROM analysis_results WHERE workspace_id = %s', (workspace_id,))
+        cur.execute('DELETE FROM workspace_layouts WHERE workspace_id = %s', (workspace_id,))
+        cur.execute('DELETE FROM workspace_notes WHERE workspace_id = %s', (workspace_id,))
 
-        # Delete workspace (cascade will clean up related data)
+        # Delete workspace
         cur.execute('DELETE FROM workspaces WHERE id = %s', (workspace_id,))
 
+    # Clean up workspace file directory
+    ws_dir = get_workspace_file_dir(user_id, project_id, workspace_id)
+    if os.path.exists(ws_dir):
+        shutil.rmtree(ws_dir, ignore_errors=True)
+
     return jsonify({'message': 'Workspace deleted'}), 200
+
+
+# ---------------------------------------------------------------------------
+# Workspace File Management
+# ---------------------------------------------------------------------------
+
+@workspaces_bp.route('/<int:project_id>/workspaces/<int:workspace_id>/files', methods=['GET'])
+@jwt_required()
+def list_workspace_files(project_id, workspace_id):
+    """List files in a workspace."""
+    user_id = int(get_jwt_identity())
+
+    with get_connection() as conn:
+        cur = conn.cursor()
+
+        if not verify_project_ownership(cur, project_id, user_id):
+            return jsonify({'error': 'Project not found'}), 404
+
+        cur.execute(
+            'SELECT id FROM workspaces WHERE id = %s AND project_id = %s',
+            (workspace_id, project_id)
+        )
+        if not cur.fetchone():
+            return jsonify({'error': 'Workspace not found'}), 404
+
+        cur.execute(
+            '''SELECT * FROM workspace_files
+               WHERE workspace_id = %s
+               ORDER BY file_name ASC''',
+            (workspace_id,)
+        )
+        files = cur.fetchall()
+
+    return jsonify({
+        'files': [{
+            'id': f['id'],
+            'file_name': f['file_name'],
+            'file_size': f['file_size'],
+            'created_at': f['created_at'],
+        } for f in files]
+    }), 200
+
+
+@workspaces_bp.route('/<int:project_id>/workspaces/<int:workspace_id>/upload', methods=['POST'])
+@jwt_required()
+def upload_workspace_files(project_id, workspace_id):
+    """Upload files to a specific workspace."""
+    user_id = int(get_jwt_identity())
+
+    with get_connection() as conn:
+        cur = conn.cursor()
+
+        project = verify_project_ownership(cur, project_id, user_id)
+        if not project:
+            return jsonify({'error': 'Project not found'}), 404
+
+        cur.execute(
+            'SELECT * FROM workspaces WHERE id = %s AND project_id = %s',
+            (workspace_id, project_id)
+        )
+        workspace = cur.fetchone()
+        if not workspace:
+            return jsonify({'error': 'Workspace not found'}), 404
+
+        # Create workspace file directory
+        ws_dir = get_workspace_file_dir(user_id, project_id, workspace_id)
+        os.makedirs(ws_dir, exist_ok=True)
+
+        files = request.files.getlist('files')
+        if not files:
+            return jsonify({'error': 'No files provided'}), 400
+
+        upload_results = []
+        for file in files:
+            if file.filename:
+                filename = secure_filename(file.filename)
+
+                # Save file to workspace directory
+                file_path = os.path.join(ws_dir, filename)
+                file.save(file_path)
+                file_size = os.path.getsize(file_path)
+
+                # Record in workspace_files table
+                cur.execute(
+                    '''INSERT INTO workspace_files (workspace_id, file_name, file_path, file_size)
+                       VALUES (%s, %s, %s, %s)''',
+                    (workspace_id, filename, file_path, file_size)
+                )
+
+                upload_results.append({
+                    'filename': filename,
+                    'status': 'success',
+                    'size': file_size,
+                })
+
+        # Update workspace file_path
+        cur.execute(
+            'UPDATE workspaces SET file_path = %s, updated_at = CURRENT_TIMESTAMP WHERE id = %s',
+            (ws_dir, workspace_id)
+        )
+
+    return jsonify({
+        'message': f'{len(upload_results)} file(s) uploaded to workspace',
+        'uploads': upload_results,
+    }), 200
+
+
+@workspaces_bp.route('/<int:project_id>/workspaces/<int:workspace_id>/files/<int:file_id>', methods=['DELETE'])
+@jwt_required()
+def delete_workspace_file(project_id, workspace_id, file_id):
+    """Delete a file from a workspace."""
+    user_id = int(get_jwt_identity())
+
+    with get_connection() as conn:
+        cur = conn.cursor()
+
+        if not verify_project_ownership(cur, project_id, user_id):
+            return jsonify({'error': 'Project not found'}), 404
+
+        cur.execute(
+            'SELECT * FROM workspace_files WHERE id = %s AND workspace_id = %s',
+            (file_id, workspace_id)
+        )
+        ws_file = cur.fetchone()
+        if not ws_file:
+            return jsonify({'error': 'File not found'}), 404
+
+        # Delete from disk
+        if os.path.exists(ws_file['file_path']):
+            os.remove(ws_file['file_path'])
+
+        # Delete from DB
+        cur.execute('DELETE FROM workspace_files WHERE id = %s', (file_id,))
+
+    return jsonify({'message': 'File deleted'}), 200
 
 
 # ---------------------------------------------------------------------------
@@ -348,18 +505,6 @@ def get_workspace_analysis(project_id, workspace_id):
         analysis_data = cur.fetchone()
 
     if not analysis_data:
-        # Fall back to project-level analysis (backward compat)
-        with get_connection() as conn:
-            cur = conn.cursor()
-            cur.execute(
-                '''SELECT * FROM analysis_results
-                   WHERE project_id = %s AND analysis_type = %s
-                   ORDER BY created_at DESC LIMIT 1''',
-                (project_id, 'database_schema')
-            )
-            analysis_data = cur.fetchone()
-
-    if not analysis_data:
         return jsonify({'error': 'No analysis found'}), 404
 
     return jsonify({
@@ -391,18 +536,6 @@ def get_workspace_runtime_flow(project_id, workspace_id):
         analysis_data = cur.fetchone()
 
     if not analysis_data:
-        # Fall back to project-level
-        with get_connection() as conn:
-            cur = conn.cursor()
-            cur.execute(
-                '''SELECT * FROM analysis_results
-                   WHERE project_id = %s AND analysis_type = %s AND workspace_id IS NULL
-                   ORDER BY created_at DESC LIMIT 1''',
-                (project_id, 'runtime_flow')
-            )
-            analysis_data = cur.fetchone()
-
-    if not analysis_data:
         return jsonify({'error': 'No runtime flow analysis found'}), 404
 
     return jsonify({
@@ -415,7 +548,7 @@ def get_workspace_runtime_flow(project_id, workspace_id):
 @workspaces_bp.route('/<int:project_id>/workspaces/<int:workspace_id>/analyze/runtime-flow', methods=['POST'])
 @jwt_required()
 def analyze_workspace_runtime_flow(project_id, workspace_id):
-    """Run runtime flow analysis and store under a specific workspace."""
+    """Run runtime flow analysis on workspace files."""
     user_id = int(get_jwt_identity())
 
     with get_connection() as conn:
@@ -430,27 +563,39 @@ def analyze_workspace_runtime_flow(project_id, workspace_id):
             'SELECT * FROM workspaces WHERE id = %s AND project_id = %s',
             (workspace_id, project_id)
         )
-        if not cur.fetchone():
+        workspace = cur.fetchone()
+        if not workspace:
             return jsonify({'error': 'Workspace not found'}), 404
 
-        file_path = project.get('file_path')
-        if not file_path or not os.path.exists(file_path):
-            return jsonify({'error': 'Project files not found. Please upload project files first.'}), 400
+        # Use workspace-specific file directory
+        ws_dir = get_workspace_file_dir(user_id, project_id, workspace_id)
+
+        # Check if workspace has files
+        cur.execute(
+            'SELECT COUNT(*) as count FROM workspace_files WHERE workspace_id = %s',
+            (workspace_id,)
+        )
+        file_count = cur.fetchone()['count']
+
+        if file_count == 0 or not os.path.exists(ws_dir):
+            return jsonify({
+                'error': 'No files in this workspace. Upload files first before analyzing.'
+            }), 400
 
         try:
             manager = ParserManager()
-            flow_data = manager.parse_runtime_flow(file_path)
+            flow_data = manager.parse_runtime_flow(ws_dir)
+
+            # Delete old workspace analysis
+            cur.execute(
+                'DELETE FROM analysis_results WHERE workspace_id = %s AND analysis_type = %s',
+                (workspace_id, 'runtime_flow')
+            )
 
             cur.execute(
                 '''INSERT INTO analysis_results (project_id, analysis_type, result_data, workspace_id)
                    VALUES (%s, %s, %s, %s)''',
                 (project_id, 'runtime_flow', json.dumps(flow_data), workspace_id)
-            )
-
-            # Ensure project flag is set
-            cur.execute(
-                'UPDATE projects SET has_runtime_flow = %s WHERE id = %s',
-                (True, project_id)
             )
 
             return jsonify({
@@ -486,18 +631,6 @@ def get_workspace_api_routes(project_id, workspace_id):
         analysis_data = cur.fetchone()
 
     if not analysis_data:
-        # Fall back to project-level
-        with get_connection() as conn:
-            cur = conn.cursor()
-            cur.execute(
-                '''SELECT * FROM analysis_results
-                   WHERE project_id = %s AND analysis_type = %s AND workspace_id IS NULL
-                   ORDER BY created_at DESC LIMIT 1''',
-                (project_id, 'api_routes')
-            )
-            analysis_data = cur.fetchone()
-
-    if not analysis_data:
         return jsonify({'error': 'No API routes analysis found'}), 404
 
     return jsonify({
@@ -510,7 +643,7 @@ def get_workspace_api_routes(project_id, workspace_id):
 @workspaces_bp.route('/<int:project_id>/workspaces/<int:workspace_id>/analyze/api-routes', methods=['POST'])
 @jwt_required()
 def analyze_workspace_api_routes(project_id, workspace_id):
-    """Run API routes analysis and store under a specific workspace."""
+    """Run API routes analysis on workspace files."""
     user_id = int(get_jwt_identity())
 
     with get_connection() as conn:
@@ -525,26 +658,39 @@ def analyze_workspace_api_routes(project_id, workspace_id):
             'SELECT * FROM workspaces WHERE id = %s AND project_id = %s',
             (workspace_id, project_id)
         )
-        if not cur.fetchone():
+        workspace = cur.fetchone()
+        if not workspace:
             return jsonify({'error': 'Workspace not found'}), 404
 
-        file_path = project.get('file_path')
-        if not file_path or not os.path.exists(file_path):
-            return jsonify({'error': 'Project files not found. Please upload project files first.'}), 400
+        # Use workspace-specific file directory
+        ws_dir = get_workspace_file_dir(user_id, project_id, workspace_id)
+
+        # Check if workspace has files
+        cur.execute(
+            'SELECT COUNT(*) as count FROM workspace_files WHERE workspace_id = %s',
+            (workspace_id,)
+        )
+        file_count = cur.fetchone()['count']
+
+        if file_count == 0 or not os.path.exists(ws_dir):
+            return jsonify({
+                'error': 'No files in this workspace. Upload files first before analyzing.'
+            }), 400
 
         try:
             manager = ParserManager()
-            routes_data = manager.parse_api_routes(file_path)
+            routes_data = manager.parse_api_routes(ws_dir)
+
+            # Delete old workspace analysis
+            cur.execute(
+                'DELETE FROM analysis_results WHERE workspace_id = %s AND analysis_type = %s',
+                (workspace_id, 'api_routes')
+            )
 
             cur.execute(
                 '''INSERT INTO analysis_results (project_id, analysis_type, result_data, workspace_id)
                    VALUES (%s, %s, %s, %s)''',
                 (project_id, 'api_routes', json.dumps(routes_data), workspace_id)
-            )
-
-            cur.execute(
-                'UPDATE projects SET has_api_routes = %s WHERE id = %s',
-                (True, project_id)
             )
 
             return jsonify({

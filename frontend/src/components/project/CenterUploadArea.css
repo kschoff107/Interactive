@@ -209,6 +209,29 @@
   background-color: #2563eb;
 }
 
+/* Compact variant for secondary upload option */
+.upload-dropzone.compact {
+  padding: 1.5rem 2rem;
+  max-width: 400px;
+  border-width: 2px;
+  border-style: dashed;
+}
+
+.upload-dropzone.compact:hover {
+  border-color: #4299e1;
+  background-color: #edf2f7;
+}
+
+.dark .upload-dropzone.compact {
+  background-color: #2d3748;
+  border-color: #4a5568;
+}
+
+.dark .upload-dropzone.compact:hover {
+  background-color: #374151;
+  border-color: #60a5fa;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
   .center-upload-area {

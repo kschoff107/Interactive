@@ -132,6 +132,19 @@ def init_postgres_database(db_url):
             );
         """)
 
+        # Create workspace_files table
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS workspace_files (
+                id SERIAL PRIMARY KEY,
+                workspace_id INTEGER NOT NULL,
+                file_name VARCHAR(255) NOT NULL,
+                file_path VARCHAR(500) NOT NULL,
+                file_size INTEGER DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
+            );
+        """)
+
         # Create indexes for performance
         cur.execute("CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);")
@@ -142,6 +155,7 @@ def init_postgres_database(db_url):
         cur.execute("CREATE INDEX IF NOT EXISTS idx_code_analysis_lookup ON code_analysis(project_id, file_hash);")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_code_analysis_expires ON code_analysis(expires_at);")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_workspaces_project_type ON workspaces(project_id, analysis_type);")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_workspace_files_workspace_id ON workspace_files(workspace_id);")
 
         # Add missing columns to existing tables (migrations for existing deployments)
         # Each migration in its own try/except to handle partial schema states
@@ -154,6 +168,7 @@ def init_postgres_database(db_url):
             "ALTER TABLE analysis_results ADD COLUMN IF NOT EXISTS workspace_id INTEGER REFERENCES workspaces(id) ON DELETE SET NULL;",
             "ALTER TABLE workspace_layouts ADD COLUMN IF NOT EXISTS workspace_id INTEGER REFERENCES workspaces(id) ON DELETE SET NULL;",
             "ALTER TABLE workspace_notes ADD COLUMN IF NOT EXISTS workspace_id INTEGER REFERENCES workspaces(id) ON DELETE SET NULL;",
+            "ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS file_path VARCHAR(500);",
         ]
 
         for migration in migrations:
@@ -298,6 +313,19 @@ def init_sqlite_database(db_url):
             );
         """)
 
+        # Create workspace_files table
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS workspace_files (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                workspace_id INTEGER NOT NULL,
+                file_name VARCHAR(255) NOT NULL,
+                file_path VARCHAR(500) NOT NULL,
+                file_size INTEGER DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
+            );
+        """)
+
         # Create indexes for performance
         cur.execute("CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);")
@@ -308,12 +336,14 @@ def init_sqlite_database(db_url):
         cur.execute("CREATE INDEX IF NOT EXISTS idx_code_analysis_lookup ON code_analysis(project_id, file_hash);")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_code_analysis_expires ON code_analysis(expires_at);")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_workspaces_project_type ON workspaces(project_id, analysis_type);")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_workspace_files_workspace_id ON workspace_files(workspace_id);")
 
         # Add workspace_id columns to existing tables (SQLite migration)
         sqlite_migrations = [
             ("analysis_results", "workspace_id", "INTEGER"),
             ("workspace_layouts", "workspace_id", "INTEGER"),
             ("workspace_notes", "workspace_id", "INTEGER"),
+            ("workspaces", "file_path", "VARCHAR(500)"),
         ]
         for table, column, col_type in sqlite_migrations:
             try:

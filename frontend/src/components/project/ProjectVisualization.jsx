@@ -49,14 +49,13 @@ export default function ProjectVisualization() {
   const [apiRoutesLoading, setApiRoutesLoading] = useState(false);
   const [apiRoutesLayoutTrigger, setApiRoutesLayoutTrigger] = useState(0);
 
-  // Project status and upload area state
+  // Project status state
   const [projectStatus, setProjectStatus] = useState({
     has_database_schema: false,
     has_runtime_flow: false,
     has_api_routes: false,
     last_upload_date: null
   });
-  const [showUploadArea, setShowUploadArea] = useState(false);
 
   // Workspace state
   const [workspaces, setWorkspaces] = useState({});
@@ -184,16 +183,20 @@ export default function ProjectVisualization() {
   const handleWorkspaceDelete = async (workspaceId) => {
     try {
       await workspacesAPI.delete(projectId, workspaceId);
-      // If deleting the active workspace, switch to another
+      // If deleting the active workspace, switch to another or clear
       if (workspaceId === activeWorkspaceId) {
         const at = viewToAnalysisType(activeView);
         const remaining = (workspaces[at] || []).filter(ws => ws.id !== workspaceId);
+        setRuntimeFlowData(null);
+        setApiRoutesData(null);
+        setNodes([]);
+        setEdges([]);
+        setHasUnsavedChanges(false);
+        setLastSaved(null);
         if (remaining.length > 0) {
           setActiveWorkspaceId(remaining[0].id);
-          setRuntimeFlowData(null);
-          setApiRoutesData(null);
-          setNodes([]);
-          setEdges([]);
+        } else {
+          setActiveWorkspaceId(null);
         }
       }
       await loadWorkspaces();
@@ -223,24 +226,16 @@ export default function ProjectVisualization() {
     }
   }, [activeView, activeWorkspaceId, project]);
 
-  // Determine if upload area should be shown
-  useEffect(() => {
-    console.log('[DEBUG] Checking if upload area should show:', {
-      activeView,
-      projectStatus,
-      has_database_schema: projectStatus.has_database_schema,
-      has_runtime_flow: projectStatus.has_runtime_flow,
-      has_api_routes: projectStatus.has_api_routes
-    });
-
-    const shouldShow =
-      (activeView === 'schema' && !projectStatus.has_database_schema) ||
-      (activeView === 'flow' && !projectStatus.has_runtime_flow) ||
-      (activeView === 'api' && !projectStatus.has_api_routes);
-
-    console.log('[DEBUG] showUploadArea will be set to:', shouldShow);
-    setShowUploadArea(shouldShow);
-  }, [activeView, projectStatus]);
+  // Workspace-level empty state: show upload area when active workspace has no data
+  const isWorkspaceEmpty = (() => {
+    if (activeView === 'schema') {
+      // Schema is empty if nodes only contain the placeholder node
+      return nodes.length === 0 || (nodes.length === 1 && nodes[0].id === '1');
+    }
+    if (activeView === 'flow') return !runtimeFlowData && !flowLoading && !isAnalyzing;
+    if (activeView === 'api') return !apiRoutesData && !apiRoutesLoading && !isAnalyzingRoutes;
+    return false;
+  })();
 
   const loadProjectAndVisualization = async () => {
     try {
@@ -726,16 +721,24 @@ export default function ProjectVisualization() {
   };
 
   const handleUploadComplete = async (result) => {
-    // Update project status
-    if (result.project_status) {
-      setProjectStatus(result.project_status);
+    toast.success('Files uploaded! Running analysis...');
+
+    // After uploading files to workspace, trigger analysis
+    try {
+      if (activeView === 'flow') {
+        await handleAnalyzeRuntimeFlow();
+      } else if (activeView === 'api') {
+        await handleAnalyzeApiRoutes();
+      } else if (activeView === 'schema') {
+        // Reload schema data for workspace
+        await loadSchemaForWorkspace();
+      }
+    } catch (error) {
+      // Analysis errors are handled in the individual handlers
     }
 
-    // Reload project and visualization
-    await loadProjectAndVisualization();
-    await fetchProjectStatus();
-
-    toast.success('Files uploaded and analyzed successfully!');
+    // Refresh workspace list (file counts may have changed)
+    await loadWorkspaces();
   };
 
   if (loading) {
@@ -915,10 +918,10 @@ export default function ProjectVisualization() {
           <div className="flex-1 relative">
             {activeView === 'schema' && (
               <>
-                {console.log('[DEBUG] Rendering schema view - showUploadArea:', showUploadArea)}
-                {showUploadArea ? (
+                {isWorkspaceEmpty ? (
                   <CenterUploadArea
                     projectId={projectId}
+                    workspaceId={activeWorkspaceId}
                     analysisType="database_schema"
                     onUploadComplete={handleUploadComplete}
                   />
@@ -994,9 +997,10 @@ export default function ProjectVisualization() {
 
             {activeView === 'flow' && (
               <>
-                {showUploadArea ? (
+                {isWorkspaceEmpty ? (
                   <CenterUploadArea
                     projectId={projectId}
+                    workspaceId={activeWorkspaceId}
                     analysisType="runtime_flow"
                     onUploadComplete={handleUploadComplete}
                   />
@@ -1014,9 +1018,10 @@ export default function ProjectVisualization() {
 
             {activeView === 'api' && (
               <>
-                {showUploadArea ? (
+                {isWorkspaceEmpty ? (
                   <CenterUploadArea
                     projectId={projectId}
+                    workspaceId={activeWorkspaceId}
                     analysisType="api_routes"
                     onUploadComplete={handleUploadComplete}
                   />
