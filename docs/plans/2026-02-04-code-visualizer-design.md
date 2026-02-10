@@ -1,6 +1,6 @@
 # Code Visualizer - Design Document
 
-**Date:** February 4, 2026 (Updated: February 10, 2026 — Multi-Workspace)
+**Date:** February 4, 2026 (Updated: February 10, 2026 — Per-Workspace File Storage)
 **Project:** Visual Backend Code Analyzer
 **Architecture:** Monolithic Flask App with Modular Parsers
 **Status:** MVP Deployed on Render
@@ -11,7 +11,7 @@
 
 **Backend (Python/Flask):**
 - ✅ Flask application with JWT authentication
-- ✅ PostgreSQL database with all tables (users, projects, analysis_results, workspace_layouts, workspace_notes, workspaces)
+- ✅ PostgreSQL database with all tables (users, projects, analysis_results, workspace_layouts, workspace_notes, workspaces, workspace_files)
 - ✅ SQLite support for local development
 - ✅ Database abstraction layer supporting both SQLite and PostgreSQL
 - ✅ User registration and login
@@ -29,6 +29,8 @@
 - ✅ Multi-workspace support: `workspaces` table, `workspace_id` on analysis/layout/notes tables
 - ✅ Workspace CRUD API endpoints (list, create, rename, delete)
 - ✅ Workspace-scoped data endpoints (layout, analysis, runtime-flow, api-routes per workspace)
+- ✅ Per-workspace file storage: upload, list, and delete files per workspace
+- ✅ Workspace-scoped analysis: analyze only workspace files (not project-level)
 - ✅ Auto-creation of default workspaces for backward compatibility
 - ✅ Security: path traversal prevention, URL validation (github.com only), file size/count limits
 
@@ -51,6 +53,8 @@
 - ✅ Multi-workspace sidebar: expandable two-level tree with workspace sub-items per visualization type
 - ✅ Workspace creation (+), inline rename (double-click), and delete (x) in sidebar
 - ✅ Workspace-aware data loading and layout persistence (each workspace loads independently)
+- ✅ Per-workspace file upload via CenterUploadArea (files go to workspace, not project)
+- ✅ Empty workspace detection: shows upload area when workspace has no analysis data
 
 **Deployment:**
 - ✅ Deployed on Render (https://interactive-frontend.onrender.com)
@@ -143,8 +147,10 @@ A web application that helps visual learners understand backend systems by analy
 
 ┌─────────────────────────────────────────────┐
 │      File Storage (local/S3)                │
-│  - Uploaded project files                   │
-│  - Cloned Git repositories                  │
+│  - Per-workspace files:                     │
+│    storage/uploads/{uid}/{pid}/ws_{wid}/    │
+│  - Legacy project-level files:              │
+│    storage/uploads/{uid}/{pid}/             │
 └─────────────────────────────────────────────┘
 ```
 
@@ -202,8 +208,21 @@ CREATE TABLE workspaces (
     analysis_type VARCHAR(50) NOT NULL, -- 'database_schema', 'runtime_flow', 'api_routes'
     name VARCHAR(200) NOT NULL,
     sort_order INTEGER DEFAULT 0,
+    file_path VARCHAR(500),  -- workspace-specific file directory
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+### workspace_files table
+```sql
+CREATE TABLE workspace_files (
+    id SERIAL PRIMARY KEY,
+    workspace_id INTEGER REFERENCES workspaces(id) ON DELETE CASCADE,
+    file_name VARCHAR(255) NOT NULL,
+    file_path VARCHAR(500) NOT NULL,
+    file_size INTEGER DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 ```
 
@@ -315,21 +334,22 @@ CREATE TABLE workspace_layouts (
    - Provides project name and description
 
 3. **Upload/Clone Code:**
-   - **If Upload:** User drags/drops folder or selects files
-     - React sends files to `/api/projects/upload` endpoint
-     - Flask saves files to `storage/uploads/{user_id}/{project_id}/`
+   - **If Upload to Workspace:** User drags/drops files into a workspace
+     - React sends files to `/api/projects/{id}/workspaces/{ws_id}/upload`
+     - Flask saves files to `storage/uploads/{user_id}/{project_id}/ws_{workspace_id}/`
+     - Files tracked in `workspace_files` table
    - **If Git:** User provides repo URL
      - React sends URL to `/api/projects/clone` endpoint
-     - Flask clones repo to `storage/repos/{user_id}/{project_id}/`
-     - Supports public repos initially (GitHub, GitLab, Bitbucket)
+     - Flask downloads selected files to `storage/uploads/{user_id}/{project_id}/`
+     - Supports public GitHub repos (API-based, no full cloning)
 
-4. **Automatic Analysis:**
-   - After upload/clone, Flask automatically:
-     - Detects language/framework by scanning files
-     - Calls appropriate parser
-     - Parser returns standardized JSON structure
-     - Saves to `analysis_results` table
-     - Returns project ID and analysis status to frontend
+4. **Workspace Analysis:**
+   - User triggers analysis from workspace UI (or auto after upload):
+     - Analyze endpoint checks workspace-specific files in `ws_{workspace_id}/` directory
+     - If workspace has no files, returns error prompting upload first
+     - Parser analyzes only the workspace's files
+     - Results saved to `analysis_results` with `workspace_id`
+     - Each workspace's analysis is independent
 
 5. **View Visualization:**
    - User navigates to project detail page
@@ -363,6 +383,9 @@ CREATE TABLE workspace_layouts (
 - `GET /api/projects/{id}/workspaces/{ws_id}/analysis` (workspace-scoped schema)
 - `GET/POST /api/projects/{id}/workspaces/{ws_id}/runtime-flow` (workspace-scoped flow)
 - `GET/POST /api/projects/{id}/workspaces/{ws_id}/api-routes` (workspace-scoped routes)
+- `POST /api/projects/{id}/workspaces/{ws_id}/upload` (upload files to workspace)
+- `GET /api/projects/{id}/workspaces/{ws_id}/files` (list workspace files)
+- `DELETE /api/projects/{id}/workspaces/{ws_id}/files/{file_id}` (delete workspace file)
 
 ---
 
@@ -886,7 +909,7 @@ code-visualizer/
 │   │   ├── workspace_layout.py      # + workspace_id field
 │   │   └── workspace_note.py        # + workspace_id field
 │   ├── routes/
-│   │   └── workspace_routes.py      # Workspace CRUD + scoped data endpoints
+│   │   └── workspace_routes.py      # Workspace CRUD + file upload + scoped data endpoints
 │   ├── parsers/
 │   ├── services/
 │   │   ├── code_analysis_service.py  # AI-powered analysis
@@ -933,6 +956,7 @@ code-visualizer/
 14. ✅ **GitHub repository import** (API-based, selective file download — no full cloning)
 15. ✅ **Source Files panel** in project sidebar (full repo tree, branch badge, clickable repo link)
 16. ✅ **Multi-workspace support** — multiple workspaces per visualization type with create, rename, delete; expandable sidebar tree; workspace-scoped data loading and layout persistence
+17. ✅ **Per-workspace file storage** — files uploaded and stored per workspace (not project-level); workspace_files table tracks files; analyze endpoints use workspace files only; empty workspace shows upload area; workspace deletion cleans up files on disk
 
 ## Next Steps
 
