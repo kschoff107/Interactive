@@ -207,6 +207,54 @@ export default function ProjectVisualization() {
     }
   };
 
+  const handleWorkspaceDuplicate = async (workspaceId, analysisType) => {
+    try {
+      // Find the source workspace name
+      const allWs = Object.values(workspaces).flat();
+      const source = allWs.find(ws => ws.id === workspaceId);
+      const newName = (source?.name || 'Workspace') + ' (Copy)';
+      const response = await workspacesAPI.create(projectId, analysisType, newName);
+      const newWs = response.data.workspace;
+      await loadWorkspaces(null, newWs.id);
+      const viewId = analysisTypeToView(analysisType);
+      setActiveView(viewId);
+      setActiveWorkspaceId(newWs.id);
+      setRuntimeFlowData(null);
+      setApiRoutesData(null);
+      setNodes([]);
+      setEdges([]);
+      setHasUnsavedChanges(false);
+      setLastSaved(null);
+      toast.success('Workspace duplicated');
+    } catch (error) {
+      toast.error('Failed to duplicate workspace');
+    }
+  };
+
+  const handleWorkspaceClearData = async (workspaceId) => {
+    try {
+      // Delete all files in the workspace
+      const filesResponse = await workspacesAPI.listFiles(projectId, workspaceId);
+      const files = filesResponse.data.files || [];
+      for (const file of files) {
+        await workspacesAPI.deleteFile(projectId, workspaceId, file.id);
+      }
+      // Clear local state if this is the active workspace
+      if (workspaceId === activeWorkspaceId) {
+        setRuntimeFlowData(null);
+        setApiRoutesData(null);
+        setNodes([]);
+        setEdges([]);
+        setHasUnsavedChanges(false);
+        setLastSaved(null);
+      }
+      await loadWorkspaces();
+      toast.success('Workspace data cleared');
+    } catch (error) {
+      toast.error('Failed to clear workspace data');
+    }
+  };
+
   useEffect(() => {
     console.log('[DEBUG] Initial mount - loading project and status');
     loadProjectAndVisualization();
@@ -910,6 +958,8 @@ export default function ProjectVisualization() {
           onWorkspaceCreate={handleWorkspaceCreate}
           onWorkspaceRename={handleWorkspaceRename}
           onWorkspaceDelete={handleWorkspaceDelete}
+          onWorkspaceDuplicate={handleWorkspaceDuplicate}
+          onWorkspaceClearData={handleWorkspaceClearData}
         />
 
         {/* Visualization Area */}
