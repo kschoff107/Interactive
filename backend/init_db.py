@@ -51,6 +51,7 @@ def init_postgres_database(db_url):
                 framework VARCHAR(50),
                 has_database_schema BOOLEAN DEFAULT FALSE,
                 has_runtime_flow BOOLEAN DEFAULT FALSE,
+                has_api_routes BOOLEAN DEFAULT FALSE,
                 last_upload_date TIMESTAMP,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -132,6 +133,7 @@ def init_postgres_database(db_url):
         migrations = [
             "ALTER TABLE projects ADD COLUMN IF NOT EXISTS has_database_schema BOOLEAN DEFAULT FALSE;",
             "ALTER TABLE projects ADD COLUMN IF NOT EXISTS has_runtime_flow BOOLEAN DEFAULT FALSE;",
+            "ALTER TABLE projects ADD COLUMN IF NOT EXISTS has_api_routes BOOLEAN DEFAULT FALSE;",
             "ALTER TABLE projects ADD COLUMN IF NOT EXISTS last_upload_date TIMESTAMP;",
         ]
 
@@ -196,6 +198,7 @@ def init_sqlite_database(db_url):
                 framework VARCHAR(50),
                 has_database_schema BOOLEAN DEFAULT 0,
                 has_runtime_flow BOOLEAN DEFAULT 0,
+                has_api_routes BOOLEAN DEFAULT 0,
                 last_upload_date TIMESTAMP,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
