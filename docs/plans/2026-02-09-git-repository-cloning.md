@@ -2,7 +2,8 @@
 
 **Date:** February 9, 2026
 **Feature:** Import from GitHub Repository (API-based, no cloning)
-**Status:** Planning
+**Status:** Completed (February 10, 2026)
+**Commit:** 484b893
 
 ## Decisions Made
 
