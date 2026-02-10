@@ -1,6 +1,6 @@
 # Code Visualizer - Design Document
 
-**Date:** February 4, 2026 (Updated: February 10, 2026)
+**Date:** February 4, 2026 (Updated: February 10, 2026 — Multi-Workspace)
 **Project:** Visual Backend Code Analyzer
 **Architecture:** Monolithic Flask App with Modular Parsers
 **Status:** MVP Deployed on Render
@@ -11,7 +11,7 @@
 
 **Backend (Python/Flask):**
 - ✅ Flask application with JWT authentication
-- ✅ PostgreSQL database with all tables (users, projects, analysis_results, workspace_layouts, workspace_notes)
+- ✅ PostgreSQL database with all tables (users, projects, analysis_results, workspace_layouts, workspace_notes, workspaces)
 - ✅ SQLite support for local development
 - ✅ Database abstraction layer supporting both SQLite and PostgreSQL
 - ✅ User registration and login
@@ -26,6 +26,10 @@
 - ✅ Git API service with URL parsing, tree fetching, selective file download
 - ✅ `git_branch` persistence on import
 - ✅ `GET /projects/<id>/files` endpoint for listing project files on disk
+- ✅ Multi-workspace support: `workspaces` table, `workspace_id` on analysis/layout/notes tables
+- ✅ Workspace CRUD API endpoints (list, create, rename, delete)
+- ✅ Workspace-scoped data endpoints (layout, analysis, runtime-flow, api-routes per workspace)
+- ✅ Auto-creation of default workspaces for backward compatibility
 - ✅ Security: path traversal prevention, URL validation (github.com only), file size/count limits
 
 **Frontend (React):**
@@ -44,6 +48,9 @@
 - ✅ "Decode This" insight guide with AI-powered code analysis
 - ✅ GitHub Import modal with file browser, checkbox selection, quick-select by extension
 - ✅ Source Files panel in sidebar (git-imported projects) — full repo tree from GitHub API, clickable repo link, branch badge
+- ✅ Multi-workspace sidebar: expandable two-level tree with workspace sub-items per visualization type
+- ✅ Workspace creation (+), inline rename (double-click), and delete (x) in sidebar
+- ✅ Workspace-aware data loading and layout persistence (each workspace loads independently)
 
 **Deployment:**
 - ✅ Deployed on Render (https://interactive-frontend.onrender.com)
@@ -187,6 +194,19 @@ CREATE TABLE projects (
 );
 ```
 
+### workspaces table
+```sql
+CREATE TABLE workspaces (
+    id SERIAL PRIMARY KEY,
+    project_id INTEGER REFERENCES projects(id) ON DELETE CASCADE,
+    analysis_type VARCHAR(50) NOT NULL, -- 'database_schema', 'runtime_flow', 'api_routes'
+    name VARCHAR(200) NOT NULL,
+    sort_order INTEGER DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
+
 ### analysis_results table
 ```sql
 CREATE TABLE analysis_results (
@@ -194,6 +214,7 @@ CREATE TABLE analysis_results (
     project_id INTEGER REFERENCES projects(id) ON DELETE CASCADE,
     analysis_type VARCHAR(50) NOT NULL, -- 'database_schema', 'api_routes', etc.
     result_data JSONB NOT NULL, -- the parsed schema/data
+    workspace_id INTEGER REFERENCES workspaces(id) ON DELETE SET NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 ```
@@ -208,6 +229,7 @@ CREATE TABLE workspace_notes (
     position_x FLOAT NOT NULL,
     position_y FLOAT NOT NULL,
     color VARCHAR(20) DEFAULT 'yellow', -- 'yellow', 'blue', 'green', 'pink'
+    workspace_id INTEGER REFERENCES workspaces(id) ON DELETE SET NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -220,6 +242,7 @@ CREATE TABLE workspace_layouts (
     project_id INTEGER REFERENCES projects(id) ON DELETE CASCADE,
     analysis_type VARCHAR(50) NOT NULL,
     layout_data JSONB NOT NULL, -- stores table positions
+    workspace_id INTEGER REFERENCES workspaces(id) ON DELETE SET NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -332,6 +355,14 @@ CREATE TABLE workspace_layouts (
 - `PUT /api/notes/{note_id}`
 - `DELETE /api/notes/{note_id}`
 - `PUT /api/projects/{id}/layout`
+- `GET /api/projects/{id}/workspaces` (list workspaces grouped by type)
+- `POST /api/projects/{id}/workspaces` (create workspace)
+- `PATCH /api/projects/{id}/workspaces/{ws_id}` (rename)
+- `DELETE /api/projects/{id}/workspaces/{ws_id}` (delete)
+- `GET/POST /api/projects/{id}/workspaces/{ws_id}/layout` (workspace-scoped layout)
+- `GET /api/projects/{id}/workspaces/{ws_id}/analysis` (workspace-scoped schema)
+- `GET/POST /api/projects/{id}/workspaces/{ws_id}/runtime-flow` (workspace-scoped flow)
+- `GET/POST /api/projects/{id}/workspaces/{ws_id}/api-routes` (workspace-scoped routes)
 
 ---
 
@@ -420,14 +451,14 @@ src/
 │   ├── project/
 │   │   ├── ProjectUpload.jsx      # ✅ File upload UI
 │   │   ├── ProjectVisualization.jsx # ✅ React Flow workspace
-│   │   ├── Sidebar.jsx            # ✅ Visualization nav + Source panel
+│   │   ├── Sidebar.jsx            # ✅ Expandable workspace tree + Source panel
 │   │   ├── SourceFilesPanel.jsx   # ✅ GitHub repo tree in sidebar
 │   │   ├── FlowVisualization.jsx  # ✅ Runtime flow view
 │   │   └── ApiRoutesVisualization.jsx # ✅ API routes view
 │   └── common/
 │       └── ProtectedRoute.jsx     # ✅ Auth guard
 ├── services/
-│   └── api.js                     # ✅ Axios instance with JWT + gitAPI
+│   └── api.js                     # ✅ Axios instance with JWT + gitAPI + workspacesAPI
 ├── context/
 │   ├── AuthContext.jsx            # ✅ User auth state
 │   └── ThemeContext.jsx           # ✅ Light/Dark mode state
@@ -443,13 +474,23 @@ Chosen for:
 - Good performance with many nodes
 - Active community
 
-**Left Sidebar Menu:**
+**Left Sidebar Menu (Expandable Tree with Multi-Workspace):**
 ```
-• Database Schema (implemented)
-• Runtime Flow (implemented)
-• API Routes (implemented)
-• Code Structure (future)
+VISUALIZATIONS
+  Database Schema          [+]
+    > Default
+    > (user-created workspaces...)
+  Runtime Flow             [+]
+    > Default
+  API Routes               [+]
+    > Default
+  Code Structure           Soon
 ```
+- Each visualization type is expandable with chevron toggle
+- [+] button creates a new workspace under that type
+- Clicking a workspace loads its analysis data and layout
+- Double-click workspace name for inline rename
+- Hover shows delete (x) button
 
 **Main Workspace Layout:**
 
@@ -840,7 +881,12 @@ code-visualizer/
 │   ├── init_db.py
 │   ├── requirements.txt
 │   ├── models/
+│   │   ├── workspace.py             # Workspace model (multi-workspace)
+│   │   ├── analysis_result.py       # + workspace_id field
+│   │   ├── workspace_layout.py      # + workspace_id field
+│   │   └── workspace_note.py        # + workspace_id field
 │   ├── routes/
+│   │   └── workspace_routes.py      # Workspace CRUD + scoped data endpoints
 │   ├── parsers/
 │   ├── services/
 │   │   ├── code_analysis_service.py  # AI-powered analysis
@@ -886,6 +932,7 @@ code-visualizer/
 13. ✅ **API Routes visualization** (Flask routes parser with blueprints, methods, auth detection)
 14. ✅ **GitHub repository import** (API-based, selective file download — no full cloning)
 15. ✅ **Source Files panel** in project sidebar (full repo tree, branch badge, clickable repo link)
+16. ✅ **Multi-workspace support** — multiple workspaces per visualization type with create, rename, delete; expandable sidebar tree; workspace-scoped data loading and layout persistence
 
 ## Next Steps
 
@@ -897,7 +944,6 @@ code-visualizer/
    - Sequelize parser (JavaScript)
 4. **Add workspace features:**
    - Table search and filtering
-   - Auto-layout algorithm (dagre)
    - Context menu (right-click)
 5. **Write comprehensive tests:**
    - Parser unit tests
