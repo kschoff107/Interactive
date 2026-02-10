@@ -151,6 +151,103 @@ def get_cached_analysis(project_id):
         }), 200
 
 
+@analysis_bp.route('/<int:project_id>/analyze-api-routes', methods=['POST'])
+@jwt_required()
+def analyze_api_routes(project_id):
+    """
+    Generate AI-powered API routes analysis for a project.
+
+    Request Body (optional):
+        {
+            "force_regenerate": false  // Bypass cache and regenerate
+        }
+
+    Returns:
+        {
+            "status": "success",
+            "analysis": {
+                "overview": "...",
+                "route_organization": "...",
+                "http_methods": "...",
+                "security_review": "...",
+                "design_patterns": "...",
+                "endpoint_examples": "..."
+            },
+            "cached": true/false,
+            "generated_at": "2024-01-15T10:30:00Z"
+        }
+    """
+    user_id = int(get_jwt_identity())
+
+    # Get request options (handle missing or empty body)
+    data = {}
+    if request.is_json:
+        data = request.get_json() or {}
+    force_regenerate = data.get('force_regenerate', False)
+
+    with get_connection() as conn:
+        cur = conn.cursor()
+
+        # Verify project ownership
+        cur.execute('SELECT * FROM projects WHERE id = %s AND user_id = %s', (project_id, user_id))
+        project_data = cur.fetchone()
+
+        if not project_data:
+            return jsonify({'status': 'error', 'error': 'Project not found'}), 404
+
+        # Check if project has API routes data
+        if not project_data.get('has_api_routes'):
+            return jsonify({
+                'status': 'error',
+                'error': 'No API routes data available. Please analyze API routes first.'
+            }), 400
+
+        # Get the API routes data from analysis_results
+        cur.execute(
+            '''SELECT result_data FROM analysis_results
+               WHERE project_id = %s AND analysis_type = %s
+               ORDER BY created_at DESC LIMIT 1''',
+            (project_id, 'api_routes')
+        )
+        analysis_row = cur.fetchone()
+
+        if not analysis_row:
+            return jsonify({
+                'status': 'error',
+                'error': 'API routes data not found. Please re-analyze the project.'
+            }), 404
+
+        routes_data = json.loads(analysis_row['result_data'])
+
+    # Initialize the analysis service
+    service = CodeAnalysisService()
+
+    # Check if service is configured
+    if not service.is_configured():
+        return jsonify({
+            'status': 'error',
+            'error': 'AI analysis not configured. Contact administrator.'
+        }), 503
+
+    # Generate or retrieve analysis
+    try:
+        result = service.analyze_api_routes(
+            project_id=project_id,
+            routes_data=routes_data,
+            force_regenerate=force_regenerate
+        )
+        return jsonify(result), 200
+
+    except CodeAnalysisError as e:
+        response = {
+            'status': 'error',
+            'error': str(e)
+        }
+        if e.retry_after:
+            response['retry_after'] = e.retry_after
+        return jsonify(response), 503
+
+
 @analysis_bp.route('/<int:project_id>/analyze-code/status', methods=['GET'])
 @jwt_required()
 def get_analysis_status(project_id):

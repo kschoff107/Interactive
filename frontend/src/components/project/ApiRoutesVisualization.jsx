@@ -12,6 +12,7 @@ import dagre from 'dagre';
 
 import RouteNode from './nodes/RouteNode';
 import BlueprintNode from './nodes/BlueprintNode';
+import ApiRoutesInsightGuide from './ApiRoutesInsightGuide';
 import { transformApiRoutesData, estimateRouteNodeHeight, getRouteNodeWidth } from '../../utils/apiRoutesTransform';
 
 // Register custom node types for API routes
@@ -74,6 +75,7 @@ export default function ApiRoutesVisualization({ routesData, isDark, onToggleThe
   const [initialNodes, setInitialNodes] = useState([]);
   const [initialEdges, setInitialEdges] = useState([]);
   const [methodFilter, setMethodFilter] = useState(null);
+  const [showInsightGuide, setShowInsightGuide] = useState(false);
 
   // Transform and layout routes data on initial load
   useEffect(() => {
@@ -253,6 +255,21 @@ export default function ApiRoutesVisualization({ routesData, isDark, onToggleThe
           maskColor={isDark ? 'rgb(17, 24, 39, 0.6)' : 'rgb(243, 244, 246, 0.6)'}
         />
 
+        {/* Decode This button - top-left */}
+        <div className="absolute top-4 left-4 z-10">
+          <button
+            onClick={() => setShowInsightGuide(true)}
+            className="bg-purple-600 hover:bg-purple-700 dark:bg-purple-500 dark:hover:bg-purple-600 text-white px-4 py-2 rounded-lg shadow-lg transition-all duration-200 flex items-center gap-2 font-medium text-sm"
+            title="Learn about this visualization"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"
+                d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            Decode This
+          </button>
+        </div>
+
         {/* Method filter buttons - top center */}
         <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-10 flex flex-wrap gap-2 justify-center">
           <button
@@ -332,6 +349,15 @@ export default function ApiRoutesVisualization({ routesData, isDark, onToggleThe
           </div>
         )}
       </ReactFlow>
+
+      {/* Insight Guide Modal */}
+      <ApiRoutesInsightGuide
+        isOpen={showInsightGuide}
+        onClose={() => setShowInsightGuide(false)}
+        isDark={isDark}
+        routesData={routesData}
+        projectId={projectId}
+      />
     </div>
   );
 }
