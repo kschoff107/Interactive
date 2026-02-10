@@ -124,6 +124,47 @@ export default function ApiRoutesVisualization({ routesData, isDark, onToggleThe
     PATCH: 'bg-purple-500',
   };
 
+  // Filter nodes based on selected method
+  const filteredNodes = useMemo(() => {
+    if (!methodFilter) return nodes;
+
+    // Get IDs of route nodes that match the filter
+    const matchingRouteIds = new Set();
+    const matchingBlueprintIds = new Set();
+
+    nodes.forEach(node => {
+      if (node.type === 'routeNode' && node.data?.methods?.includes(methodFilter)) {
+        matchingRouteIds.add(node.id);
+        // Find parent blueprint from edges
+        edges.forEach(edge => {
+          if (edge.target === node.id) {
+            matchingBlueprintIds.add(edge.source);
+          }
+        });
+      }
+    });
+
+    return nodes.filter(node => {
+      if (node.type === 'routeNode') {
+        return matchingRouteIds.has(node.id);
+      }
+      if (node.type === 'blueprintNode') {
+        return matchingBlueprintIds.has(node.id);
+      }
+      return true;
+    });
+  }, [nodes, edges, methodFilter]);
+
+  // Filter edges to only show connections between visible nodes
+  const filteredEdges = useMemo(() => {
+    if (!methodFilter) return edges;
+
+    const visibleNodeIds = new Set(filteredNodes.map(n => n.id));
+    return edges.filter(edge =>
+      visibleNodeIds.has(edge.source) && visibleNodeIds.has(edge.target)
+    );
+  }, [edges, filteredNodes, methodFilter]);
+
   if (!routesData || nodes.length === 0) {
     return (
       <div className="flex items-center justify-center h-full">
@@ -155,8 +196,8 @@ export default function ApiRoutesVisualization({ routesData, isDark, onToggleThe
   return (
     <div className="w-full h-full relative">
       <ReactFlow
-        nodes={nodes}
-        edges={edges}
+        nodes={filteredNodes}
+        edges={filteredEdges}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         nodeTypes={nodeTypes}
@@ -212,8 +253,8 @@ export default function ApiRoutesVisualization({ routesData, isDark, onToggleThe
           maskColor={isDark ? 'rgb(17, 24, 39, 0.6)' : 'rgb(243, 244, 246, 0.6)'}
         />
 
-        {/* Method filter buttons - top-left */}
-        <div className="absolute top-4 left-4 z-10 flex flex-wrap gap-2">
+        {/* Method filter buttons - top center */}
+        <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-10 flex flex-wrap gap-2 justify-center">
           <button
             onClick={() => setMethodFilter(null)}
             className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 ${
