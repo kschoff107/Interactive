@@ -66,6 +66,8 @@ export const workspacesAPI = {
     api.get(`/projects/${projectId}/workspaces/${workspaceId}/api-routes`),
   analyzeApiRoutes: (projectId, workspaceId) =>
     api.post(`/projects/${projectId}/workspaces/${workspaceId}/analyze/api-routes`),
+  analyzeDatabaseSchema: (projectId, workspaceId) =>
+    api.post(`/projects/${projectId}/workspaces/${workspaceId}/analyze/database-schema`),
   getAnalysis: (projectId, workspaceId) =>
     api.get(`/projects/${projectId}/workspaces/${workspaceId}/analysis`),
   // Workspace file management

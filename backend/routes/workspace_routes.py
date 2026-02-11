@@ -789,3 +789,69 @@ def analyze_workspace_api_routes(project_id, workspace_id):
         except Exception as e:
             conn.rollback()
             return jsonify({'error': f'API routes analysis failed: {str(e)}'}), 500
+
+
+@workspaces_bp.route('/<int:project_id>/workspaces/<int:workspace_id>/analyze/database-schema', methods=['POST'])
+@jwt_required()
+def analyze_workspace_database_schema(project_id, workspace_id):
+    """Run database schema analysis on workspace files."""
+    user_id = int(get_jwt_identity())
+
+    with get_connection() as conn:
+        cur = conn.cursor()
+
+        project = verify_project_ownership(cur, project_id, user_id)
+        if not project:
+            return jsonify({'error': 'Project not found'}), 404
+
+        # Verify workspace
+        cur.execute(
+            'SELECT * FROM workspaces WHERE id = %s AND project_id = %s',
+            (workspace_id, project_id)
+        )
+        workspace = cur.fetchone()
+        if not workspace:
+            return jsonify({'error': 'Workspace not found'}), 404
+
+        # Use workspace-specific file directory
+        ws_dir = get_workspace_file_dir(user_id, project_id, workspace_id)
+
+        # Check if workspace has files
+        cur.execute(
+            'SELECT COUNT(*) as count FROM workspace_files WHERE workspace_id = %s',
+            (workspace_id,)
+        )
+        file_count = cur.fetchone()['count']
+
+        if file_count == 0 or not os.path.exists(ws_dir):
+            return jsonify({
+                'error': 'No files in this workspace. Upload files first before analyzing.'
+            }), 400
+
+        try:
+            manager = ParserManager()
+            language, framework = manager.detect_language_and_framework(ws_dir)
+            schema_data = manager.parse_database_schema(ws_dir, language, framework)
+
+            # Delete old workspace analysis
+            cur.execute(
+                'DELETE FROM analysis_results WHERE workspace_id = %s AND analysis_type = %s',
+                (workspace_id, 'database_schema')
+            )
+
+            cur.execute(
+                '''INSERT INTO analysis_results (project_id, analysis_type, result_data, workspace_id)
+                   VALUES (%s, %s, %s, %s)''',
+                (project_id, 'database_schema', json.dumps(schema_data), workspace_id)
+            )
+
+            return jsonify({
+                'message': 'Database schema analysis completed',
+                'schema': schema_data
+            }), 200
+
+        except UnsupportedFrameworkError as e:
+            return jsonify({'error': str(e)}), 400
+        except Exception as e:
+            conn.rollback()
+            return jsonify({'error': f'Database schema analysis failed: {str(e)}'}), 500

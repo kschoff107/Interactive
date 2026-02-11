@@ -818,7 +818,8 @@ export default function ProjectVisualization() {
       } else if (activeView === 'api') {
         await handleAnalyzeApiRoutes();
       } else if (activeView === 'schema') {
-        // Reload schema data for workspace
+        // Analyze schema files in workspace, then load results
+        await workspacesAPI.analyzeDatabaseSchema(projectId, activeWorkspaceId);
         await loadSchemaForWorkspace();
       }
     } catch (error) {

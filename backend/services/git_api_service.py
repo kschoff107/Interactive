@@ -21,6 +21,12 @@ class GitApiService:
     MAX_FILES_PER_IMPORT = 50
     REQUEST_TIMEOUT = 15
 
+    def __init__(self):
+        token = os.environ.get('GITHUB_TOKEN')
+        self._headers = {}
+        if token:
+            self._headers['Authorization'] = f'token {token}'
+
     # Directories to exclude from tree display
     EXCLUDED_DIRS = {
         'node_modules', '.git', '__pycache__', '.tox', '.mypy_cache',
@@ -112,7 +118,7 @@ class GitApiService:
         url = f"{self.GITHUB_API_BASE}/repos/{owner}/{repo}"
 
         try:
-            response = requests.get(url, timeout=self.REQUEST_TIMEOUT)
+            response = requests.get(url, headers=self._headers, timeout=self.REQUEST_TIMEOUT)
 
             if response.status_code == 404:
                 return {'success': False,
@@ -162,7 +168,7 @@ class GitApiService:
         url = f"{self.GITHUB_API_BASE}/repos/{owner}/{repo}/git/trees/{branch}?recursive=1"
 
         try:
-            response = requests.get(url, timeout=self.REQUEST_TIMEOUT)
+            response = requests.get(url, headers=self._headers, timeout=self.REQUEST_TIMEOUT)
 
             if response.status_code == 404:
                 return {'success': False, 'files': [], 'branch': branch,
@@ -231,7 +237,7 @@ class GitApiService:
         url = f"{self.GITHUB_API_BASE}/repos/{owner}/{repo}/contents/{path}?ref={branch}"
 
         try:
-            response = requests.get(url, timeout=self.REQUEST_TIMEOUT)
+            response = requests.get(url, headers=self._headers, timeout=self.REQUEST_TIMEOUT)
 
             if response.status_code == 404:
                 return {'success': False, 'content': None, 'size': 0,
@@ -323,6 +329,7 @@ class GitApiService:
         try:
             response = requests.get(
                 f"{self.GITHUB_API_BASE}/rate_limit",
+                headers=self._headers,
                 timeout=self.REQUEST_TIMEOUT
             )
             if response.status_code == 200:
