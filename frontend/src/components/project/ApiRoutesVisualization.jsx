@@ -12,6 +12,7 @@ import dagre from 'dagre';
 
 import RouteNode from './nodes/RouteNode';
 import BlueprintNode from './nodes/BlueprintNode';
+import StickyNote from './StickyNote';
 import ApiRoutesInsightGuide from './ApiRoutesInsightGuide';
 import { transformApiRoutesData, estimateRouteNodeHeight, getRouteNodeWidth } from '../../utils/apiRoutesTransform';
 
@@ -19,12 +20,17 @@ import { transformApiRoutesData, estimateRouteNodeHeight, getRouteNodeWidth } fr
 const nodeTypes = {
   routeNode: RouteNode,
   blueprintNode: BlueprintNode,
+  stickyNote: StickyNote,
 };
 
 /**
  * Apply Dagre layout to route nodes
  */
 const getLayoutedRouteElements = (nodes, edges, direction = 'TB') => {
+  // Separate sticky notes from route nodes — notes skip dagre layout
+  const stickyNotes = nodes.filter(n => n.type === 'stickyNote');
+  const routeNodes = nodes.filter(n => n.type !== 'stickyNote');
+
   const dagreGraph = new dagre.graphlib.Graph();
   dagreGraph.setDefaultEdgeLabel(() => ({}));
 
@@ -37,7 +43,7 @@ const getLayoutedRouteElements = (nodes, edges, direction = 'TB') => {
   });
 
   // Add nodes to dagre
-  nodes.forEach((node) => {
+  routeNodes.forEach((node) => {
     const width = getRouteNodeWidth(node);
     const height = estimateRouteNodeHeight(node);
     dagreGraph.setNode(node.id, { width, height });
@@ -52,7 +58,7 @@ const getLayoutedRouteElements = (nodes, edges, direction = 'TB') => {
   dagre.layout(dagreGraph);
 
   // Apply positions
-  const layoutedNodes = nodes.map((node) => {
+  const layoutedNodes = routeNodes.map((node) => {
     const nodeWithPosition = dagreGraph.node(node.id);
     const width = getRouteNodeWidth(node);
     const height = estimateRouteNodeHeight(node);
@@ -66,7 +72,7 @@ const getLayoutedRouteElements = (nodes, edges, direction = 'TB') => {
     };
   });
 
-  return { nodes: layoutedNodes, edges };
+  return { nodes: [...layoutedNodes, ...stickyNotes], edges };
 };
 
 export default function ApiRoutesVisualization({ routesData, isDark, onToggleTheme, layoutTrigger, projectId, savedLayout, onNodesUpdate, onNodesDragged }) {
@@ -88,6 +94,45 @@ export default function ApiRoutesVisualization({ routesData, isDark, onToggleThe
   useEffect(() => {
     if (onNodesUpdate) onNodesUpdate(nodes);
   }, [nodes, onNodesUpdate]);
+
+  // Sticky Note handlers
+  const handleNoteTextChange = useCallback((noteId, newText) => {
+    setNodes((nds) =>
+      nds.map((node) => node.id === noteId ? { ...node, data: { ...node.data, text: newText } } : node)
+    );
+    if (onNodesDragged) onNodesDragged();
+  }, [setNodes, onNodesDragged]);
+
+  const handleNoteColorChange = useCallback((noteId, newColor) => {
+    setNodes((nds) =>
+      nds.map((node) => node.id === noteId ? { ...node, data: { ...node.data, color: newColor } } : node)
+    );
+    if (onNodesDragged) onNodesDragged();
+  }, [setNodes, onNodesDragged]);
+
+  const handleDeleteNote = useCallback((noteId) => {
+    setNodes((nds) => nds.filter((node) => node.id !== noteId));
+    if (onNodesDragged) onNodesDragged();
+  }, [setNodes, onNodesDragged]);
+
+  const handleAddNote = useCallback(() => {
+    const noteId = `note-${Date.now()}`;
+    const newNote = {
+      id: noteId,
+      type: 'stickyNote',
+      position: { x: 250, y: 150 },
+      data: {
+        id: noteId,
+        text: '',
+        color: 'yellow',
+        onTextChange: handleNoteTextChange,
+        onColorChange: handleNoteColorChange,
+        onDelete: handleDeleteNote,
+      },
+    };
+    setNodes((nds) => [...nds, newNote]);
+    if (onNodesDragged) onNodesDragged();
+  }, [setNodes, onNodesDragged, handleNoteTextChange, handleNoteColorChange, handleDeleteNote]);
 
   // Transform and layout routes data on initial load
   useEffect(() => {
@@ -111,23 +156,48 @@ export default function ApiRoutesVisualization({ routesData, isDark, onToggleThe
           });
         }
 
-        setNodes(finalNodes);
+        // Restore sticky notes from saved layout
+        const stickyNotes = [];
+        if (savedLayout && savedLayout.nodes) {
+          savedLayout.nodes.forEach((savedNode) => {
+            if (savedNode.type === 'stickyNote') {
+              stickyNotes.push({
+                id: savedNode.id,
+                type: 'stickyNote',
+                position: savedNode.position,
+                data: {
+                  id: savedNode.id,
+                  text: savedNode.data?.text || '',
+                  color: savedNode.data?.color || 'yellow',
+                  onTextChange: handleNoteTextChange,
+                  onColorChange: handleNoteColorChange,
+                  onDelete: handleDeleteNote,
+                },
+              });
+            }
+          });
+        }
+
+        setNodes([...finalNodes, ...stickyNotes]);
         setEdges(layoutedEdges);
         // Store initial state for re-layout
         setInitialNodes(routeNodes);
         setInitialEdges(routeEdges);
       }
     }
-  }, [routesData, savedLayout, setNodes, setEdges]);
+  }, [routesData, savedLayout, setNodes, setEdges, handleNoteTextChange, handleNoteColorChange, handleDeleteNote]);
 
-  // Re-layout when layoutTrigger changes
+  // Re-layout when layoutTrigger changes (preserve sticky notes)
   useEffect(() => {
     if (layoutTrigger > 0 && initialNodes.length > 0) {
       const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedRouteElements(
         initialNodes,
         initialEdges
       );
-      setNodes(layoutedNodes);
+      setNodes((currentNodes) => {
+        const existingStickyNotes = currentNodes.filter(n => n.type === 'stickyNote');
+        return [...layoutedNodes, ...existingStickyNotes];
+      });
       setEdges(layoutedEdges);
     }
   }, [layoutTrigger, initialNodes, initialEdges, setNodes, setEdges]);
@@ -247,6 +317,14 @@ export default function ApiRoutesVisualization({ routesData, isDark, onToggleThe
           className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden"
         >
           <ControlButton
+            onClick={handleAddNote}
+            title="Add Sticky Note"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+            </svg>
+          </ControlButton>
+          <ControlButton
             onClick={onToggleTheme}
             title={isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
           >
@@ -264,6 +342,7 @@ export default function ApiRoutesVisualization({ routesData, isDark, onToggleThe
 
         <MiniMap
           nodeColor={(node) => {
+            if (node.type === 'stickyNote') return '#fbbf24';
             if (node.type === 'blueprintNode') return '#64748b';
             if (node.type === 'routeNode') {
               const methods = node.data?.methods || [];
