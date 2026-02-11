@@ -2,6 +2,35 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Thin, discrete scrollbars for sidebar panels */
+.sidebar-scroll::-webkit-scrollbar {
+  width: 4px;
+}
+.sidebar-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.sidebar-scroll::-webkit-scrollbar-thumb {
+  background: #9ca3af;
+  border-radius: 4px;
+}
+.sidebar-scroll::-webkit-scrollbar-thumb:hover {
+  background: #6b7280;
+}
+.dark .sidebar-scroll::-webkit-scrollbar-thumb {
+  background: #4b5563;
+}
+.dark .sidebar-scroll::-webkit-scrollbar-thumb:hover {
+  background: #6b7280;
+}
+/* Firefox */
+.sidebar-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: #9ca3af transparent;
+}
+.dark .sidebar-scroll {
+  scrollbar-color: #4b5563 transparent;
+}
+
 /* ReactFlow edge label styling */
 .react-flow__edge-text {
   font-size: 18px;

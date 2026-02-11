@@ -1,5 +1,6 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import SourceFilesPanel from './SourceFilesPanel';
+import ResizeHandle from './ResizeHandle';
 
 const navigationItems = [
   {
@@ -276,6 +277,7 @@ function WorkspaceItem({ workspace, isActive, onSelect, onRename, onDelete, onDu
 }
 
 export default function Sidebar({
+  width = 220,
   activeView,
   onViewChange,
   project,
@@ -298,12 +300,36 @@ export default function Sidebar({
     return initial;
   });
 
+  const isGitProject = project && project.source_type === 'git';
+
+  // Vertical split: fraction of flexible area given to nav (rest goes to source panel)
+  const [verticalSplit, setVerticalSplit] = useState(() => {
+    const saved = localStorage.getItem('sidebarVerticalSplit');
+    return saved ? parseFloat(saved) : 0.6;
+  });
+
+  const contentRef = useRef(null);
+
+  useEffect(() => {
+    localStorage.setItem('sidebarVerticalSplit', verticalSplit.toString());
+  }, [verticalSplit]);
+
+  const handleVerticalResize = useCallback((deltaY) => {
+    if (!contentRef.current) return;
+    const h = contentRef.current.clientHeight;
+    if (h === 0) return;
+    setVerticalSplit(prev => Math.max(0.2, Math.min(0.8, prev + deltaY / h)));
+  }, []);
+
   const toggleExpand = (itemId) => {
     setExpanded(prev => ({ ...prev, [itemId]: !prev[itemId] }));
   };
 
   return (
-    <div className="w-[220px] bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col">
+    <div
+      style={{ width }}
+      className="bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col flex-shrink-0"
+    >
       {/* Sidebar Header */}
       <div className="px-4 py-6 border-b border-gray-200 dark:border-gray-700">
         <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
@@ -311,113 +337,129 @@ export default function Sidebar({
         </h2>
       </div>
 
-      {/* Navigation Items */}
-      <nav className="flex-1 px-2 py-4 space-y-0.5 overflow-y-auto">
-        {navigationItems.map((item) => {
-          const isDisabled = item.disabled;
-          const itemWorkspaces = workspaces[item.analysisType] || [];
-          const isExpanded = expanded[item.id];
-          const hasActiveChild = itemWorkspaces.some(ws => ws.id === activeWorkspaceId);
+      {/* Flexible content area */}
+      <div ref={contentRef} className="flex-1 flex flex-col overflow-hidden min-h-0">
+        {/* Navigation Items */}
+        <nav
+          className="px-2 py-4 space-y-0.5 overflow-y-auto sidebar-scroll"
+          style={isGitProject ? { flex: `0 0 ${verticalSplit * 100}%` } : { flex: 1 }}
+        >
+          {navigationItems.map((item) => {
+            const isDisabled = item.disabled;
+            const itemWorkspaces = workspaces[item.analysisType] || [];
+            const isExpanded = expanded[item.id];
+            const hasActiveChild = itemWorkspaces.some(ws => ws.id === activeWorkspaceId);
 
-          return (
-            <div key={item.id}>
-              {/* Type header */}
-              <div className="flex items-center">
-                <button
-                  onClick={() => {
-                    if (isDisabled) return;
-                    toggleExpand(item.id);
-                    // If clicking a type that has workspaces, also select the first one
-                    if (itemWorkspaces.length > 0 && !hasActiveChild && onWorkspaceSelect) {
-                      onWorkspaceSelect(item.id, itemWorkspaces[0].id);
-                    } else if (itemWorkspaces.length === 0) {
-                      onViewChange(item.id);
-                    }
-                  }}
-                  disabled={isDisabled}
-                  className={`
-                    flex-1 flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium
-                    transition-all duration-200 relative
-                    ${hasActiveChild
-                      ? 'text-blue-700 dark:text-blue-300'
-                      : isDisabled
-                      ? 'text-gray-400 dark:text-gray-600 cursor-not-allowed opacity-50'
-                      : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700/50'
-                    }
-                  `}
-                >
-                  {/* Icon */}
-                  <span className={hasActiveChild ? 'text-blue-600 dark:text-blue-400' : ''}>
-                    {item.icon}
-                  </span>
-
-                  {/* Label */}
-                  <span className="flex-1 text-left">{item.name}</span>
-
-                  {/* Coming Soon badge */}
-                  {isDisabled && (
-                    <span className="text-xs px-2 py-0.5 bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400 rounded">
-                      Soon
-                    </span>
-                  )}
-
-                  {/* Chevron for expandable items */}
-                  {!isDisabled && (
-                    <svg
-                      className={`w-3.5 h-3.5 transition-transform duration-200 text-gray-400 ${isExpanded ? 'rotate-90' : ''}`}
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
-                    </svg>
-                  )}
-                </button>
-
-                {/* Add workspace button */}
-                {!isDisabled && onWorkspaceCreate && (
+            return (
+              <div key={item.id}>
+                {/* Type header */}
+                <div className="flex items-center">
                   <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onWorkspaceCreate(item.analysisType);
-                      if (!isExpanded) {
-                        setExpanded(prev => ({ ...prev, [item.id]: true }));
+                    onClick={() => {
+                      if (isDisabled) return;
+                      toggleExpand(item.id);
+                      // If clicking a type that has workspaces, also select the first one
+                      if (itemWorkspaces.length > 0 && !hasActiveChild && onWorkspaceSelect) {
+                        onWorkspaceSelect(item.id, itemWorkspaces[0].id);
+                      } else if (itemWorkspaces.length === 0) {
+                        onViewChange(item.id);
                       }
                     }}
-                    className="p-1.5 mr-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
-                    title={`Add ${item.name} workspace`}
+                    disabled={isDisabled}
+                    className={`
+                      flex-1 flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium
+                      transition-all duration-200 relative
+                      ${hasActiveChild
+                        ? 'text-blue-700 dark:text-blue-300'
+                        : isDisabled
+                        ? 'text-gray-400 dark:text-gray-600 cursor-not-allowed opacity-50'
+                        : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700/50'
+                      }
+                    `}
                   >
-                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
-                    </svg>
+                    {/* Icon */}
+                    <span className={hasActiveChild ? 'text-blue-600 dark:text-blue-400' : ''}>
+                      {item.icon}
+                    </span>
+
+                    {/* Label */}
+                    <span className="flex-1 text-left">{item.name}</span>
+
+                    {/* Coming Soon badge */}
+                    {isDisabled && (
+                      <span className="text-xs px-2 py-0.5 bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400 rounded">
+                        Soon
+                      </span>
+                    )}
+
+                    {/* Chevron for expandable items */}
+                    {!isDisabled && (
+                      <svg
+                        className={`w-3.5 h-3.5 transition-transform duration-200 text-gray-400 ${isExpanded ? 'rotate-90' : ''}`}
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
+                      </svg>
+                    )}
                   </button>
+
+                  {/* Add workspace button */}
+                  {!isDisabled && onWorkspaceCreate && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onWorkspaceCreate(item.analysisType);
+                        if (!isExpanded) {
+                          setExpanded(prev => ({ ...prev, [item.id]: true }));
+                        }
+                      }}
+                      className="p-1.5 mr-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+                      title={`Add ${item.name} workspace`}
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
+                      </svg>
+                    </button>
+                  )}
+                </div>
+
+                {/* Workspace sub-items */}
+                {!isDisabled && isExpanded && itemWorkspaces.length > 0 && (
+                  <div className="mt-0.5 mb-1 space-y-0.5">
+                    {itemWorkspaces.map(ws => (
+                      <WorkspaceItem
+                        key={ws.id}
+                        workspace={ws}
+                        isActive={activeWorkspaceId === ws.id}
+                        onSelect={() => onWorkspaceSelect && onWorkspaceSelect(item.id, ws.id)}
+                        onRename={(newName) => onWorkspaceRename && onWorkspaceRename(ws.id, newName)}
+                        onDelete={() => onWorkspaceDelete && onWorkspaceDelete(ws.id)}
+                        onDuplicate={() => onWorkspaceDuplicate && onWorkspaceDuplicate(ws.id, item.analysisType)}
+                        onClearData={() => onWorkspaceClearData && onWorkspaceClearData(ws.id)}
+                      />
+                    ))}
+                  </div>
                 )}
               </div>
+            );
+          })}
+        </nav>
 
-              {/* Workspace sub-items */}
-              {!isDisabled && isExpanded && itemWorkspaces.length > 0 && (
-                <div className="mt-0.5 mb-1 space-y-0.5">
-                  {itemWorkspaces.map(ws => (
-                    <WorkspaceItem
-                      key={ws.id}
-                      workspace={ws}
-                      isActive={activeWorkspaceId === ws.id}
-                      onSelect={() => onWorkspaceSelect && onWorkspaceSelect(item.id, ws.id)}
-                      onRename={(newName) => onWorkspaceRename && onWorkspaceRename(ws.id, newName)}
-                      onDelete={() => onWorkspaceDelete && onWorkspaceDelete(ws.id)}
-                      onDuplicate={() => onWorkspaceDuplicate && onWorkspaceDuplicate(ws.id, item.analysisType)}
-                      onClearData={() => onWorkspaceClearData && onWorkspaceClearData(ws.id)}
-                    />
-                  ))}
-                </div>
-              )}
+        {/* Vertical resize handle + Source Files Panel (git projects only) */}
+        {isGitProject && (
+          <>
+            <ResizeHandle direction="vertical" onResize={handleVerticalResize} />
+            <div
+              style={{ flex: `0 0 ${(1 - verticalSplit) * 100}%` }}
+              className="overflow-hidden min-h-0"
+            >
+              <SourceFilesPanel project={project} onImportFiles={onImportSourceFiles} />
             </div>
-          );
-        })}
-      </nav>
-
-      {/* Source Files Panel (git-imported projects only) */}
-      <SourceFilesPanel project={project} onImportFiles={onImportSourceFiles} />
+          </>
+        )}
+      </div>
 
       {/* Sidebar Footer */}
       <div className="px-4 py-3 border-t border-gray-200 dark:border-gray-700">

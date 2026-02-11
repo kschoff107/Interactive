@@ -19,6 +19,7 @@ import Sidebar from './Sidebar';
 import FlowVisualization from './FlowVisualization';
 import ApiRoutesVisualization from './ApiRoutesVisualization';
 import CenterUploadArea from './CenterUploadArea';
+import ResizeHandle from './ResizeHandle';
 
 // Register custom node types
 const nodeTypes = {
@@ -67,6 +68,12 @@ export default function ProjectVisualization() {
 
   // Saved layout for flow/api views
   const [workspaceLayout, setWorkspaceLayout] = useState(null);
+
+  // Sidebar width (persisted)
+  const [sidebarWidth, setSidebarWidth] = useState(() => {
+    const saved = localStorage.getItem('sidebarWidth');
+    return saved ? Math.max(180, Math.min(500, parseInt(saved, 10))) : 220;
+  });
 
   // Layout state
   const [previousLayout, setPreviousLayout] = useState(null);
@@ -822,6 +829,15 @@ export default function ProjectVisualization() {
     await loadWorkspaces();
   };
 
+  // Persist sidebar width
+  useEffect(() => {
+    localStorage.setItem('sidebarWidth', sidebarWidth.toString());
+  }, [sidebarWidth]);
+
+  const handleSidebarResize = useCallback((deltaX) => {
+    setSidebarWidth(prev => Math.max(180, Math.min(500, prev + deltaX)));
+  }, []);
+
   const handleImportSourceFiles = async (paths) => {
     if (!activeWorkspaceId) {
       toast.error('Select a workspace first');
@@ -998,6 +1014,7 @@ export default function ProjectVisualization() {
       <div className="flex-1 flex overflow-hidden">
         {/* Sidebar */}
         <Sidebar
+          width={sidebarWidth}
           activeView={activeView}
           onViewChange={setActiveView}
           project={project}
@@ -1011,6 +1028,7 @@ export default function ProjectVisualization() {
           onWorkspaceClearData={handleWorkspaceClearData}
           onImportSourceFiles={handleImportSourceFiles}
         />
+        <ResizeHandle direction="horizontal" onResize={handleSidebarResize} />
 
         {/* Visualization Area */}
         <div className="flex-1 flex flex-col">

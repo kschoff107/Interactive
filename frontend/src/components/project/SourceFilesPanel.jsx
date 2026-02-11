@@ -203,11 +203,11 @@ export default function SourceFilesPanel({ project, onImportFiles }) {
   if (!isGitProject) return null;
 
   return (
-    <div className="border-t border-gray-200 dark:border-gray-700">
+    <div className="flex flex-col h-full overflow-hidden">
       {/* Header */}
       <button
         onClick={() => setCollapsed(!collapsed)}
-        className="w-full flex items-center gap-2 px-4 py-3 text-left hover:bg-gray-50 dark:hover:bg-gray-700/30"
+        className="w-full flex items-center gap-2 px-4 py-3 text-left hover:bg-gray-50 dark:hover:bg-gray-700/30 flex-shrink-0"
       >
         <svg
           className={`w-3 h-3 text-gray-400 transition-transform flex-shrink-0 ${collapsed ? '' : 'rotate-90'}`}
@@ -225,7 +225,7 @@ export default function SourceFilesPanel({ project, onImportFiles }) {
       </button>
 
       {!collapsed && (
-        <div className="px-3 pb-3">
+        <div className="flex-1 overflow-y-auto px-3 pb-3 min-h-0 sidebar-scroll">
           {/* Repo link */}
           {repoInfo && (
             <a
@@ -262,7 +262,7 @@ export default function SourceFilesPanel({ project, onImportFiles }) {
           )}
 
           {/* File tree */}
-          <div className="mt-2 max-h-60 overflow-y-auto">
+          <div className="mt-2">
             {loading ? (
               <div className="flex items-center justify-center py-4">
                 <svg className="animate-spin h-4 w-4 text-gray-400" viewBox="0 0 24 24">
