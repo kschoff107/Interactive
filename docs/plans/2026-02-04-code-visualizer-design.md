@@ -1,6 +1,6 @@
 # Code Visualizer - Design Document
 
-**Date:** February 4, 2026 (Updated: February 10, 2026 — Resizable Sidebar & Source File Import)
+**Date:** February 4, 2026 (Updated: February 10, 2026 — Sticky Notes in All Views)
 **Project:** Visual Backend Code Analyzer
 **Architecture:** Monolithic Flask App with Modular Parsers
 **Status:** MVP Deployed on Render
@@ -40,13 +40,13 @@
 - ✅ Dashboard with project cards
 - ✅ Project visualization workspace with React Flow
 - ✅ Light/Dark mode toggle (Dashboard and Workspace)
-- ✅ Sticky notes functionality
+- ✅ Sticky notes functionality (all three visualization views: Schema, Runtime Flow, API Routes)
 - ✅ Workspace layout persistence
 - ✅ Theme persistence (localStorage)
 - ✅ Responsive design with Tailwind CSS
 - ✅ Toast notifications
-- ✅ Runtime Flow visualization with custom nodes (FunctionNode, ConditionalNode, etc.)
-- ✅ API Routes visualization with BlueprintNode and RouteNode (method badges, auth indicators)
+- ✅ Runtime Flow visualization with custom nodes (FunctionNode, ConditionalNode, etc.), sticky notes, toolbar
+- ✅ API Routes visualization with BlueprintNode and RouteNode (method badges, auth indicators), sticky notes, toolbar
 - ✅ Sidebar navigation between visualization types
 - ✅ "Decode This" insight guide with AI-powered code analysis
 - ✅ GitHub Import modal with file browser, checkbox selection, quick-select by extension
@@ -984,6 +984,9 @@ code-visualizer/
 19. ✅ **Drag-and-drop source file import** — drag files/folders from Source Files panel to workspace upload area, or click import icon; backend `POST /workspaces/{ws_id}/import-source` downloads files from GitHub API and stores in workspace directory
 20. ✅ **Resizable sidebar** — horizontal drag handle on sidebar right edge (180–500px width, localStorage persistence); vertical drag handle between workspace nav and Source Files panel (20–80% split, localStorage persistence); reusable ResizeHandle component with hover/drag visual feedback; discrete 4px thin scrollbars in sidebar panels
 21. ✅ **Source Files refresh button** — manual refresh button next to branch badge in Source Files panel; re-fetches GitHub repo tree on click; spinning animation during fetch
+22. ✅ **Database schema analyze endpoint** — `POST /workspaces/{ws_id}/analyze/database-schema` runs parser on workspace files; frontend triggers analysis after upload instead of just reloading
+23. ✅ **GitHub API token support** — optional `GITHUB_TOKEN` env var for authenticated requests (5,000 req/hour vs 60 unauthenticated); applied to all git API service calls
+24. ✅ **Sticky notes in all views** — Runtime Flow and API Routes views now have sticky notes and full toolbar (zoom, add note, theme toggle); notes persist via layout save; excluded from dagre auto-layout; preserved during Quick Organize
 
 ## Next Steps
 
