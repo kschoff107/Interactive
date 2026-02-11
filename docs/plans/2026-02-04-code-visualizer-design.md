@@ -1,6 +1,6 @@
 # Code Visualizer - Design Document
 
-**Date:** February 4, 2026 (Updated: February 10, 2026 — Workspace Context Menu)
+**Date:** February 4, 2026 (Updated: February 10, 2026 — Resizable Sidebar & Source File Import)
 **Project:** Visual Backend Code Analyzer
 **Architecture:** Monolithic Flask App with Modular Parsers
 **Status:** MVP Deployed on Render
@@ -30,6 +30,7 @@
 - ✅ Workspace CRUD API endpoints (list, create, rename, delete)
 - ✅ Workspace-scoped data endpoints (layout, analysis, runtime-flow, api-routes per workspace)
 - ✅ Per-workspace file storage: upload, list, and delete files per workspace
+- ✅ Import source files from GitHub to workspace via API endpoint (`POST /workspaces/{ws_id}/import-source`)
 - ✅ Workspace-scoped analysis: analyze only workspace files (not project-level)
 - ✅ Auto-creation of default workspaces for backward compatibility
 - ✅ Security: path traversal prevention, URL validation (github.com only), file size/count limits
@@ -49,7 +50,12 @@
 - ✅ Sidebar navigation between visualization types
 - ✅ "Decode This" insight guide with AI-powered code analysis
 - ✅ GitHub Import modal with file browser, checkbox selection, quick-select by extension
-- ✅ Source Files panel in sidebar (git-imported projects) — full repo tree from GitHub API, clickable repo link, branch badge
+- ✅ Source Files panel in sidebar (git-imported projects) — full repo tree from GitHub API, clickable repo link, branch badge, refresh button
+- ✅ Drag-and-drop import from Source Files panel to workspace (individual files or entire folders)
+- ✅ Resizable sidebar — drag right edge to adjust width (180–500px, persisted to localStorage)
+- ✅ Vertical split between workspace nav and Source Files panel — drag divider to allocate space (20–80%, persisted to localStorage)
+- ✅ Reusable ResizeHandle component (horizontal/vertical, visual feedback on hover/drag)
+- ✅ Discrete thin scrollbars in sidebar panels (4px webkit, thin Firefox, dark mode support)
 - ✅ Multi-workspace sidebar: expandable two-level tree with workspace sub-items per visualization type
 - ✅ Workspace creation (+) in sidebar
 - ✅ Three-dot context menu on workspace items: Rename, Duplicate, Clear Data, Delete (with confirmation modal)
@@ -387,6 +393,7 @@ CREATE TABLE workspace_layouts (
 - `POST /api/projects/{id}/workspaces/{ws_id}/upload` (upload files to workspace)
 - `GET /api/projects/{id}/workspaces/{ws_id}/files` (list workspace files)
 - `DELETE /api/projects/{id}/workspaces/{ws_id}/files/{file_id}` (delete workspace file)
+- `POST /api/projects/{id}/workspaces/{ws_id}/import-source` (import GitHub source files to workspace)
 
 ---
 
@@ -474,9 +481,11 @@ src/
 │   │   └── GitImportModal.jsx     # ✅ GitHub file browser & import
 │   ├── project/
 │   │   ├── ProjectUpload.jsx      # ✅ File upload UI
-│   │   ├── ProjectVisualization.jsx # ✅ React Flow workspace
-│   │   ├── Sidebar.jsx            # ✅ Expandable workspace tree + Source panel
-│   │   ├── SourceFilesPanel.jsx   # ✅ GitHub repo tree in sidebar
+│   │   ├── ProjectVisualization.jsx # ✅ React Flow workspace + horizontal resize
+│   │   ├── Sidebar.jsx            # ✅ Expandable workspace tree + Source panel + vertical split
+│   │   ├── SourceFilesPanel.jsx   # ✅ GitHub repo tree, refresh button, drag-to-import
+│   │   ├── ResizeHandle.jsx       # ✅ Reusable horizontal/vertical drag handle
+│   │   ├── CenterUploadArea.jsx   # ✅ Drag-and-drop upload zone (files + source import)
 │   │   ├── FlowVisualization.jsx  # ✅ Runtime flow view
 │   │   └── ApiRoutesVisualization.jsx # ✅ API routes view
 │   └── common/
@@ -509,12 +518,25 @@ VISUALIZATIONS
   API Routes               [+]
     > Default
   Code Structure           Soon
+
+─── drag divider ───  (vertical resize)
+
+SOURCE (git-imported projects only)
+  owner/repo →
+  ◊ main  ↻
+  ▸ src/
+  ▸ tests/
+    README.md
 ```
 - Each visualization type is expandable with chevron toggle
 - [+] button creates a new workspace under that type
 - Clicking a workspace loads its analysis data and layout
 - Hover shows three-dot (...) menu with: Rename, Duplicate, Clear Data, Delete
 - Delete action shows confirmation modal before proceeding
+- Sidebar right edge is draggable to resize width (180–500px, persisted to localStorage)
+- Divider between workspace nav and Source Files panel is draggable vertically (20–80% split, persisted)
+- Source Files panel shows full repo tree with drag-to-import and click-to-import actions
+- Refresh button next to branch badge re-fetches the GitHub repo tree on demand
 
 **Main Workspace Layout:**
 
@@ -959,6 +981,9 @@ code-visualizer/
 16. ✅ **Multi-workspace support** — multiple workspaces per visualization type with create, rename, delete; expandable sidebar tree; workspace-scoped data loading and layout persistence
 17. ✅ **Per-workspace file storage** — files uploaded and stored per workspace (not project-level); workspace_files table tracks files; analyze endpoints use workspace files only; empty workspace shows upload area; workspace deletion cleans up files on disk
 18. ✅ **Workspace context menu** — replaced red X delete button with three-dot (...) menu on hover; dropdown with Rename, Duplicate, Clear Data, Delete options; delete requires confirmation modal; duplicate creates new workspace with "(Copy)" suffix; clear data removes all files and analysis from workspace
+19. ✅ **Drag-and-drop source file import** — drag files/folders from Source Files panel to workspace upload area, or click import icon; backend `POST /workspaces/{ws_id}/import-source` downloads files from GitHub API and stores in workspace directory
+20. ✅ **Resizable sidebar** — horizontal drag handle on sidebar right edge (180–500px width, localStorage persistence); vertical drag handle between workspace nav and Source Files panel (20–80% split, localStorage persistence); reusable ResizeHandle component with hover/drag visual feedback; discrete 4px thin scrollbars in sidebar panels
+21. ✅ **Source Files refresh button** — manual refresh button next to branch badge in Source Files panel; re-fetches GitHub repo tree on click; spinning animation during fetch
 
 ## Next Steps
 
@@ -1009,7 +1034,7 @@ code-visualizer/
 - Private Git repository support (GitHub OAuth for higher API rate limits)
 - GitLab and Bitbucket repository support
 - Branch selection dropdown in import modal
-- "Re-import" button to refresh files from repo
+- ~~"Re-import" button to refresh files from repo~~ ✅ Done (refresh button in Source Files panel)
 - Collaborative workspaces (multi-user)
 - Real-time collaboration on diagrams
 - More language/framework support
