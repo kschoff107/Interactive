@@ -1,8 +1,7 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import ReactFlow, {
   MiniMap,
   Controls,
-  ControlButton,
   Background,
   useNodesState,
   useEdgesState,
@@ -15,9 +14,11 @@ import ConditionalNode from './nodes/ConditionalNode';
 import LoopNode from './nodes/LoopNode';
 import TryNode from './nodes/TryNode';
 import StickyNote from './StickyNote';
+import { StickyNoteButton, ThemeToggleButton } from './ToolbarButtons';
 import InsightGuide from './InsightGuide';
 import { transformFlowData, estimateFlowNodeHeight, getFlowNodeWidth } from '../../utils/flowTransform';
-import { detectCircularEdges } from '../../utils/layoutUtils';
+import { detectCircularEdges, applySavedLayout } from '../../utils/layoutUtils';
+import { useStickyNotes, restoreStickyNotesFromLayout } from '../../hooks/useStickyNotes';
 
 // Register custom node types for runtime flow
 const nodeTypes = {
@@ -121,43 +122,8 @@ export default function FlowVisualization({ flowData, isDark, onToggleTheme, lay
   }, [nodes, onNodesUpdate]);
 
   // Sticky Note handlers
-  const handleNoteTextChange = useCallback((noteId, newText) => {
-    setNodes((nds) =>
-      nds.map((node) => node.id === noteId ? { ...node, data: { ...node.data, text: newText } } : node)
-    );
-    if (onNodesDragged) onNodesDragged();
-  }, [setNodes, onNodesDragged]);
-
-  const handleNoteColorChange = useCallback((noteId, newColor) => {
-    setNodes((nds) =>
-      nds.map((node) => node.id === noteId ? { ...node, data: { ...node.data, color: newColor } } : node)
-    );
-    if (onNodesDragged) onNodesDragged();
-  }, [setNodes, onNodesDragged]);
-
-  const handleDeleteNote = useCallback((noteId) => {
-    setNodes((nds) => nds.filter((node) => node.id !== noteId));
-    if (onNodesDragged) onNodesDragged();
-  }, [setNodes, onNodesDragged]);
-
-  const handleAddNote = useCallback(() => {
-    const noteId = `note-${Date.now()}`;
-    const newNote = {
-      id: noteId,
-      type: 'stickyNote',
-      position: { x: 250, y: 150 },
-      data: {
-        id: noteId,
-        text: '',
-        color: 'yellow',
-        onTextChange: handleNoteTextChange,
-        onColorChange: handleNoteColorChange,
-        onDelete: handleDeleteNote,
-      },
-    };
-    setNodes((nds) => [...nds, newNote]);
-    if (onNodesDragged) onNodesDragged();
-  }, [setNodes, onNodesDragged, handleNoteTextChange, handleNoteColorChange, handleDeleteNote]);
+  const { handleNoteTextChange, handleNoteColorChange, handleDeleteNote, handleAddNote } =
+    useStickyNotes(setNodes, onNodesDragged);
 
   // Transform and layout flow data on initial load
   useEffect(() => {
@@ -171,37 +137,14 @@ export default function FlowVisualization({ flowData, isDark, onToggleTheme, lay
         );
 
         // Apply saved layout positions if available
-        let finalNodes = layoutedNodes;
-        if (savedLayout && savedLayout.nodes) {
-          const positionMap = new Map();
-          savedLayout.nodes.forEach(n => positionMap.set(n.id, n.position));
-          finalNodes = layoutedNodes.map(node => {
-            const savedPos = positionMap.get(node.id);
-            return savedPos ? { ...node, position: savedPos } : node;
-          });
-        }
+        const finalNodes = applySavedLayout(layoutedNodes, savedLayout);
 
         // Restore sticky notes from saved layout
-        const stickyNotes = [];
-        if (savedLayout && savedLayout.nodes) {
-          savedLayout.nodes.forEach((savedNode) => {
-            if (savedNode.type === 'stickyNote') {
-              stickyNotes.push({
-                id: savedNode.id,
-                type: 'stickyNote',
-                position: savedNode.position,
-                data: {
-                  id: savedNode.id,
-                  text: savedNode.data?.text || '',
-                  color: savedNode.data?.color || 'yellow',
-                  onTextChange: handleNoteTextChange,
-                  onColorChange: handleNoteColorChange,
-                  onDelete: handleDeleteNote,
-                },
-              });
-            }
-          });
-        }
+        const stickyNotes = restoreStickyNotesFromLayout(savedLayout, {
+          onTextChange: handleNoteTextChange,
+          onColorChange: handleNoteColorChange,
+          onDelete: handleDeleteNote,
+        });
 
         setNodes([...finalNodes, ...stickyNotes]);
         setEdges(layoutedEdges);
@@ -227,13 +170,7 @@ export default function FlowVisualization({ flowData, isDark, onToggleTheme, lay
     }
   }, [layoutTrigger, initialNodes, initialEdges, setNodes, setEdges]);
 
-  // Calculate statistics
-  const statistics = useMemo(() => {
-    if (!flowData || !flowData.statistics) {
-      return null;
-    }
-    return flowData.statistics;
-  }, [flowData]);
+  const statistics = flowData?.statistics ?? null;
 
   if (!flowData || nodes.length === 0) {
     return (
@@ -291,28 +228,8 @@ export default function FlowVisualization({ flowData, isDark, onToggleTheme, lay
           showInteractive={false}
           className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden"
         >
-          <ControlButton
-            onClick={handleAddNote}
-            title="Add Sticky Note"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-            </svg>
-          </ControlButton>
-          <ControlButton
-            onClick={onToggleTheme}
-            title={isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
-          >
-            {isDark ? (
-              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z" clipRule="evenodd" />
-              </svg>
-            ) : (
-              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z" />
-              </svg>
-            )}
-          </ControlButton>
+          <StickyNoteButton onAddNote={handleAddNote} />
+          <ThemeToggleButton isDark={isDark} onToggle={onToggleTheme} />
         </Controls>
 
         <MiniMap
@@ -339,7 +256,7 @@ export default function FlowVisualization({ flowData, isDark, onToggleTheme, lay
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"
                 d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
-            🔍 Decode This
+            Decode This
           </button>
         </div>
 

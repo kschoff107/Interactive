@@ -4,8 +4,11 @@ from database import get_connection
 from werkzeug.utils import secure_filename
 import json
 import os
+import logging
 import shutil
 from config import Config
+
+logger = logging.getLogger(__name__)
 from parsers.parser_manager import ParserManager, UnsupportedFrameworkError
 from services.git_api_service import GitApiService
 
@@ -230,7 +233,7 @@ def delete_workspace(project_id, workspace_id):
 
         # Get workspace info
         cur.execute(
-            'SELECT * FROM workspaces WHERE id = %s AND project_id = %s',
+            'SELECT id FROM workspaces WHERE id = %s AND project_id = %s',
             (workspace_id, project_id)
         )
         workspace = cur.fetchone()
@@ -249,7 +252,10 @@ def delete_workspace(project_id, workspace_id):
     # Clean up workspace file directory
     ws_dir = get_workspace_file_dir(user_id, project_id, workspace_id)
     if os.path.exists(ws_dir):
-        shutil.rmtree(ws_dir, ignore_errors=True)
+        try:
+            shutil.rmtree(ws_dir)
+        except OSError as e:
+            logger.warning('Failed to clean up workspace directory %s: %s', ws_dir, e)
 
     return jsonify({'message': 'Workspace deleted'}), 200
 
@@ -309,7 +315,7 @@ def upload_workspace_files(project_id, workspace_id):
             return jsonify({'error': 'Project not found'}), 404
 
         cur.execute(
-            'SELECT * FROM workspaces WHERE id = %s AND project_id = %s',
+            'SELECT id FROM workspaces WHERE id = %s AND project_id = %s',
             (workspace_id, project_id)
         )
         workspace = cur.fetchone()
@@ -420,7 +426,7 @@ def import_source_files(project_id, workspace_id):
 
         # Verify workspace belongs to project
         cur.execute(
-            'SELECT * FROM workspaces WHERE id = %s AND project_id = %s',
+            'SELECT id FROM workspaces WHERE id = %s AND project_id = %s',
             (workspace_id, project_id)
         )
         workspace = cur.fetchone()
@@ -529,7 +535,7 @@ def save_workspace_layout(project_id, workspace_id):
 
         # Get workspace to know analysis_type
         cur.execute(
-            'SELECT * FROM workspaces WHERE id = %s AND project_id = %s',
+            'SELECT id FROM workspaces WHERE id = %s AND project_id = %s',
             (workspace_id, project_id)
         )
         workspace = cur.fetchone()
@@ -646,7 +652,7 @@ def analyze_workspace_runtime_flow(project_id, workspace_id):
 
         # Verify workspace
         cur.execute(
-            'SELECT * FROM workspaces WHERE id = %s AND project_id = %s',
+            'SELECT id FROM workspaces WHERE id = %s AND project_id = %s',
             (workspace_id, project_id)
         )
         workspace = cur.fetchone()
@@ -684,12 +690,15 @@ def analyze_workspace_runtime_flow(project_id, workspace_id):
                 (project_id, 'runtime_flow', json.dumps(flow_data), workspace_id)
             )
 
+            conn.commit()
+
             return jsonify({
                 'message': 'Runtime flow analysis completed',
                 'flow': flow_data
             }), 200
 
         except UnsupportedFrameworkError as e:
+            conn.rollback()
             return jsonify({'error': str(e)}), 400
         except Exception as e:
             conn.rollback()
@@ -741,7 +750,7 @@ def analyze_workspace_api_routes(project_id, workspace_id):
 
         # Verify workspace
         cur.execute(
-            'SELECT * FROM workspaces WHERE id = %s AND project_id = %s',
+            'SELECT id FROM workspaces WHERE id = %s AND project_id = %s',
             (workspace_id, project_id)
         )
         workspace = cur.fetchone()
@@ -779,12 +788,15 @@ def analyze_workspace_api_routes(project_id, workspace_id):
                 (project_id, 'api_routes', json.dumps(routes_data), workspace_id)
             )
 
+            conn.commit()
+
             return jsonify({
                 'message': 'API routes analysis completed',
                 'routes': routes_data
             }), 200
 
         except UnsupportedFrameworkError as e:
+            conn.rollback()
             return jsonify({'error': str(e)}), 400
         except Exception as e:
             conn.rollback()
@@ -806,7 +818,7 @@ def analyze_workspace_database_schema(project_id, workspace_id):
 
         # Verify workspace
         cur.execute(
-            'SELECT * FROM workspaces WHERE id = %s AND project_id = %s',
+            'SELECT id FROM workspaces WHERE id = %s AND project_id = %s',
             (workspace_id, project_id)
         )
         workspace = cur.fetchone()
@@ -845,12 +857,15 @@ def analyze_workspace_database_schema(project_id, workspace_id):
                 (project_id, 'database_schema', json.dumps(schema_data), workspace_id)
             )
 
+            conn.commit()
+
             return jsonify({
                 'message': 'Database schema analysis completed',
                 'schema': schema_data
             }), 200
 
         except UnsupportedFrameworkError as e:
+            conn.rollback()
             return jsonify({'error': str(e)}), 400
         except Exception as e:
             conn.rollback()

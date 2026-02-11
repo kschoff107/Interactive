@@ -88,8 +88,8 @@ export const workspacesAPI = {
 
 // Git import endpoints
 export const gitAPI = {
-  getTree: (url) =>
-    api.get(`/projects/git/tree?url=${encodeURIComponent(url)}`),
+  getTree: (url, config) =>
+    api.get(`/projects/git/tree?url=${encodeURIComponent(url)}`, config),
   importFiles: (projectId, url, files, branch) =>
     api.post(`/projects/${projectId}/import-git`, { url, files, branch }),
 };

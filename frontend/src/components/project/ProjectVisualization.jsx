@@ -3,7 +3,6 @@ import { useParams, useNavigate } from 'react-router-dom';
 import ReactFlow, {
   MiniMap,
   Controls,
-  ControlButton,
   Background,
   useNodesState,
   useEdgesState,
@@ -14,7 +13,9 @@ import api, { projectsAPI, workspacesAPI } from '../../services/api';
 import { toast } from 'react-toastify';
 import { useTheme } from '../../context/ThemeContext';
 import { getLayoutedElements, serializeLayout, applySavedLayout } from '../../utils/layoutUtils';
+import { useStickyNotes, restoreStickyNotesFromLayout } from '../../hooks/useStickyNotes';
 import StickyNote from './StickyNote';
+import { StickyNoteButton, ThemeToggleButton } from './ToolbarButtons';
 import Sidebar from './Sidebar';
 import FlowVisualization from './FlowVisualization';
 import ApiRoutesVisualization from './ApiRoutesVisualization';
@@ -103,10 +104,8 @@ export default function ProjectVisualization() {
 
   // Fetch project status
   const fetchProjectStatus = async () => {
-    console.log('[DEBUG] Fetching project status for project:', projectId);
     try {
       const response = await api.get(`/projects/${projectId}/status`);
-      console.log('[DEBUG] Project status response:', response.data);
       setProjectStatus(response.data);
     } catch (error) {
       console.error('Error fetching project status:', error);
@@ -270,7 +269,6 @@ export default function ProjectVisualization() {
   };
 
   useEffect(() => {
-    console.log('[DEBUG] Initial mount - loading project and status');
     loadProjectAndVisualization();
     fetchProjectStatus();
     loadWorkspaces();
@@ -512,26 +510,11 @@ export default function ProjectVisualization() {
     const layoutedNodes = applySavedLayout(newNodes, savedLayout);
 
     // Restore sticky notes from saved layout
-    const stickyNotes = [];
-    if (savedLayout && savedLayout.nodes) {
-      savedLayout.nodes.forEach((savedNode) => {
-        if (savedNode.type === 'stickyNote') {
-          stickyNotes.push({
-            id: savedNode.id,
-            type: 'stickyNote',
-            position: savedNode.position,
-            data: {
-              id: savedNode.id,
-              text: savedNode.data.text || '',
-              color: savedNode.data.color || 'yellow',
-              onTextChange: handleNoteTextChange,
-              onColorChange: handleNoteColorChange,
-              onDelete: handleDeleteNote,
-            },
-          });
-        }
-      });
-    }
+    const stickyNotes = restoreStickyNotesFromLayout(savedLayout, {
+      onTextChange: handleNoteTextChange,
+      onColorChange: handleNoteColorChange,
+      onDelete: handleDeleteNote,
+    });
 
     setNodes([...layoutedNodes, ...stickyNotes]);
     setEdges(newEdges);
@@ -652,59 +635,10 @@ export default function ProjectVisualization() {
   };
 
   // Sticky Note handlers
-  const handleAddNote = () => {
-    const newNote = {
-      id: `note-${Date.now()}`,
-      type: 'stickyNote',
-      position: { x: 250, y: 150 },
-      data: {
-        id: `note-${Date.now()}`,
-        text: '',
-        color: 'yellow',
-        onTextChange: handleNoteTextChange,
-        onColorChange: handleNoteColorChange,
-        onDelete: handleDeleteNote,
-      },
-    };
-    setNodes((nds) => [...nds, newNote]);
-    setHasUnsavedChanges(true);
-  };
-
-  const handleNoteTextChange = (noteId, newText) => {
-    setNodes((nds) =>
-      nds.map((node) => {
-        if (node.id === noteId) {
-          return {
-            ...node,
-            data: { ...node.data, text: newText },
-          };
-        }
-        return node;
-      })
-    );
-    setHasUnsavedChanges(true);
-  };
-
-  const handleNoteColorChange = (noteId, newColor) => {
-    setNodes((nds) =>
-      nds.map((node) => {
-        if (node.id === noteId) {
-          return {
-            ...node,
-            data: { ...node.data, color: newColor },
-          };
-        }
-        return node;
-      })
-    );
-    setHasUnsavedChanges(true);
-  };
-
-  const handleDeleteNote = (noteId) => {
-    setNodes((nds) => nds.filter((node) => node.id !== noteId));
-    setHasUnsavedChanges(true);
-    toast.success('Note deleted');
-  };
+  const markUnsaved = useCallback(() => setHasUnsavedChanges(true), []);
+  const onNoteDeleted = useCallback(() => toast.success('Note deleted'), []);
+  const { handleNoteTextChange, handleNoteColorChange, handleDeleteNote, handleAddNote } =
+    useStickyNotes(setNodes, markUnsaved, { onDelete: onNoteDeleted });
 
   const loadRuntimeFlowData = async () => {
     if (flowLoading) return;
@@ -804,6 +738,10 @@ export default function ProjectVisualization() {
     } catch (err) {
       if (err.response?.status === 404) {
         createVisualizationNodes(project);
+      } else {
+        console.error('Failed to load schema for workspace:', err);
+        toast.error('Failed to load schema analysis');
+        createVisualizationNodes(project);
       }
     }
   };
@@ -819,8 +757,13 @@ export default function ProjectVisualization() {
         await handleAnalyzeApiRoutes();
       } else if (activeView === 'schema') {
         // Analyze schema files in workspace, then load results
-        await workspacesAPI.analyzeDatabaseSchema(projectId, activeWorkspaceId);
-        await loadSchemaForWorkspace();
+        try {
+          await workspacesAPI.analyzeDatabaseSchema(projectId, activeWorkspaceId);
+          await loadSchemaForWorkspace();
+        } catch (schemaError) {
+          const msg = schemaError.response?.data?.error || 'Database schema analysis failed';
+          toast.error(msg);
+        }
       }
     } catch (error) {
       // Analysis errors are handled in the individual handlers
@@ -1084,28 +1027,8 @@ export default function ProjectVisualization() {
                       nodeTypes={nodeTypes}
                     >
                       <Controls>
-                        <ControlButton
-                          onClick={handleAddNote}
-                          title="Add Sticky Note"
-                        >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                          </svg>
-                        </ControlButton>
-                        <ControlButton
-                          onClick={toggleTheme}
-                          title={isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
-                        >
-                          {isDark ? (
-                            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                              <path fillRule="evenodd" d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z" clipRule="evenodd" />
-                            </svg>
-                          ) : (
-                            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                              <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z" />
-                            </svg>
-                          )}
-                        </ControlButton>
+                        <StickyNoteButton onAddNote={handleAddNote} />
+                        <ThemeToggleButton isDark={isDark} onToggle={toggleTheme} />
                       </Controls>
                       <MiniMap />
                       <Background variant="dots" gap={12} size={1} />

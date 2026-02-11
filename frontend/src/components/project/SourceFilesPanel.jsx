@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { gitAPI } from '../../services/api';
 
 function formatFileSize(bytes) {
@@ -170,6 +170,8 @@ export default function SourceFilesPanel({ project, onImportFiles }) {
   const [collapsed, setCollapsed] = useState(false);
   const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const abortRef = useRef(null);
 
   const isGitProject = project && project.source_type === 'git';
   const projectId = project?.id;
@@ -177,23 +179,39 @@ export default function SourceFilesPanel({ project, onImportFiles }) {
 
   const fetchTree = useCallback(() => {
     if (!isGitProject || !project.git_url) return;
+    // Abort any in-flight request before starting a new one
+    if (abortRef.current) abortRef.current.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
     setLoading(true);
+    setError(null);
     gitAPI
-      .getTree(project.git_url)
+      .getTree(project.git_url, { signal: controller.signal })
       .then((res) => {
-        const fileEntries = (res.data.files || []).filter(f => f.type === 'file');
-        setFiles(fileEntries);
+        if (!controller.signal.aborted) {
+          const fileEntries = (res.data.files || []).filter(f => f.type === 'file');
+          setFiles(fileEntries);
+        }
       })
-      .catch(() => {
+      .catch((err) => {
+        if (controller.signal.aborted) return;
+        const msg = err.response?.data?.error || 'Failed to load source files';
+        console.error('Source file tree fetch failed:', err);
+        setError(msg);
         setFiles([]);
       })
       .finally(() => {
-        setLoading(false);
+        if (!controller.signal.aborted) {
+          setLoading(false);
+        }
       });
   }, [isGitProject, project?.git_url]);
 
   useEffect(() => {
     fetchTree();
+    return () => {
+      if (abortRef.current) abortRef.current.abort();
+    };
   }, [fetchTree]);
 
   const tree = useMemo(() => buildFileTree(files), [files]);
@@ -278,6 +296,16 @@ export default function SourceFilesPanel({ project, onImportFiles }) {
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                 </svg>
+              </div>
+            ) : error ? (
+              <div className="px-1 py-2">
+                <p className="text-xs text-red-500 dark:text-red-400">{error}</p>
+                <button
+                  onClick={fetchTree}
+                  className="text-xs text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300 mt-1 underline"
+                >
+                  Retry
+                </button>
               </div>
             ) : files.length > 0 ? (
               <TreeNode node={tree} name="" depth={0} onImportFiles={onImportFiles} />

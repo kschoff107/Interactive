@@ -1,9 +1,12 @@
+import logging
 import requests
 import base64
 import os
 import re
 from urllib.parse import urlparse
 from typing import Dict, List, Optional
+
+logger = logging.getLogger(__name__)
 
 
 class GitApiError(Exception):
@@ -23,9 +26,15 @@ class GitApiService:
 
     def __init__(self):
         token = os.environ.get('GITHUB_TOKEN')
-        self._headers = {}
+        self._headers = {
+            'Accept': 'application/vnd.github.v3+json',
+        }
         if token:
             self._headers['Authorization'] = f'token {token}'
+        else:
+            logger.warning(
+                'GITHUB_TOKEN not set. Using unauthenticated GitHub API (60 req/hr limit).'
+            )
 
     # Directories to exclude from tree display
     EXCLUDED_DIRS = {
@@ -336,11 +345,20 @@ class GitApiService:
                 data = response.json()
                 core = data.get('resources', {}).get('core', {})
                 return {
+                    'success': True,
                     'limit': core.get('limit', 0),
                     'remaining': core.get('remaining', 0),
-                    'reset_at': core.get('reset', 0)
+                    'reset_at': core.get('reset', 0),
+                    'error': None,
                 }
-        except Exception:
-            pass
-
-        return {'limit': 0, 'remaining': 0, 'reset_at': 0}
+            return {
+                'success': False,
+                'limit': 0, 'remaining': 0, 'reset_at': 0,
+                'error': f'GitHub API returned HTTP {response.status_code}',
+            }
+        except Exception as e:
+            return {
+                'success': False,
+                'limit': 0, 'remaining': 0, 'reset_at': 0,
+                'error': f'Failed to check rate limit: {str(e)}',
+            }

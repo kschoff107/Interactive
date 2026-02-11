@@ -77,8 +77,8 @@ const CenterUploadArea = ({ projectId, workspaceId, analysisType, onUploadComple
         if (paths.length > 0 && onImportSourceFiles) {
           onImportSourceFiles(paths);
         }
-      } catch {
-        // ignore parse errors
+      } catch (err) {
+        console.error('Failed to parse dropped source files:', err);
       }
     }
   };
