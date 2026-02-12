@@ -87,23 +87,23 @@ const CenterUploadArea = ({ projectId, workspaceId, analysisType, onUploadComple
     const types = {
       'database_schema': {
         title: 'Database Schema',
-        description: 'Upload SQLAlchemy models or database files to visualize your schema',
+        description: 'Upload ORM model files or database files to visualize your schema',
         icon: '🗄️',
-        acceptedFiles: '.py, .db, .sqlite, .sqlite3',
+        acceptedFiles: '.py, .ts, .js, .java, .cs, .rb, .go, .php, .prisma, .abap, .db, .sqlite',
         analyzeLabel: 'Analyze Database Schema',
       },
       'runtime_flow': {
         title: 'Runtime Flow',
-        description: 'Upload Python source files to visualize runtime execution flow',
+        description: 'Upload source files to visualize runtime execution flow',
         icon: '🔄',
-        acceptedFiles: '.py',
+        acceptedFiles: '.py, .js, .ts, .java, .abap',
         analyzeLabel: 'Analyze Runtime Flow',
       },
       'api_routes': {
         title: 'API Routes',
-        description: 'Upload Python source files to visualize API endpoints and routes',
+        description: 'Upload source files to visualize API endpoints and routes',
         icon: '🌐',
-        acceptedFiles: '.py',
+        acceptedFiles: '.py, .js, .ts, .java, .cs, .rb, .go, .php, .abap',
         analyzeLabel: 'Analyze API Routes',
       }
     };
