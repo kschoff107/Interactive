@@ -3,6 +3,8 @@ import TableNodeDetail from './nodeDetails/TableNodeDetail';
 import FunctionNodeDetail from './nodeDetails/FunctionNodeDetail';
 import BlueprintNodeDetail from './nodeDetails/BlueprintNodeDetail';
 import RouteNodeDetail from './nodeDetails/RouteNodeDetail';
+import ClassNodeDetail from './nodeDetails/ClassNodeDetail';
+import ModuleNodeDetail from './nodeDetails/ModuleNodeDetail';
 import { lockScroll, unlockScroll } from '../../utils/modalScrollLock';
 import './NodeDetailModal.css';
 
@@ -53,6 +55,16 @@ const NodeDetailModal = ({ isOpen, onClose, isDark, node, edges, contextData }) 
     icon = '\uD83D\uDD17';
     title = node.data?.name || 'Route';
     subtitle = node.data?.url_pattern || '';
+  } else if (nodeType === 'classNode') {
+    DetailComponent = ClassNodeDetail;
+    icon = node.data?.is_interface ? '\uD83D\uDCD0' : '\uD83D\uDCE6';
+    title = node.data?.name || 'Class';
+    subtitle = node.data?.module || '';
+  } else if (nodeType === 'moduleNode') {
+    DetailComponent = ModuleNodeDetail;
+    icon = '\uD83D\uDCC4';
+    title = node.data?.name || 'Module';
+    subtitle = '';
   } else if (contextData?.schema) {
     // Schema table node (type 'default')
     DetailComponent = TableNodeDetail;

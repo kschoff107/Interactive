@@ -1,6 +1,6 @@
 # Code Visualizer - Design Document
 
-**Date:** February 4, 2026 (Updated: February 12, 2026 — Multi-Language Parser Support)
+**Date:** February 4, 2026 (Updated: February 13, 2026 — Node Detail Modal)
 **Project:** Visual Backend Code Analyzer
 **Architecture:** Monolithic Flask App with Modular Parsers
 **Status:** MVP Deployed on Render
@@ -63,6 +63,16 @@
 - ✅ Workspace-aware data loading and layout persistence (each workspace loads independently)
 - ✅ Per-workspace file upload via CenterUploadArea (files go to workspace, not project)
 - ✅ Empty workspace detection: shows upload area when workspace has no analysis data
+- ✅ Node Detail Modal — double-click any node to open expanded detail view with full context
+  - 4 detail renderers: TableNodeDetail, FunctionNodeDetail, BlueprintNodeDetail, RouteNodeDetail
+  - Each renderer looks up full record from raw backend data via `contextData` prop (no transform changes needed)
+  - Schema view: full columns table (nullable, unique, FK ref), relationships with direction arrows, foreign keys
+  - Flow view: full identity, all decorators, docstring, complexity breakdown, callers/callees with context, internal control flow, orphan warning
+  - API Routes (blueprint): file location, full route listing with method badges, security summary, method breakdown
+  - API Routes (route): full URL, docstring, path parameters, security with auth decorators, blueprint context with sibling routes
+  - Shared ref-counted scroll lock utility (`modalScrollLock.js`) prevents body scroll leak when multiple modals overlap
+  - ESC key, backdrop click, and close button all dismiss the modal
+  - Full dark mode support via CSS class-based `.node-detail-overlay.dark` selectors
 
 **Deployment:**
 - ✅ Deployed on Render (https://interactive-frontend.onrender.com)
@@ -516,11 +526,20 @@ src/
 │   │   ├── ResizeHandle.jsx       # ✅ Reusable horizontal/vertical drag handle
 │   │   ├── CenterUploadArea.jsx   # ✅ Drag-and-drop upload zone (files + source import)
 │   │   ├── FlowVisualization.jsx  # ✅ Runtime flow view
-│   │   └── ApiRoutesVisualization.jsx # ✅ API routes view
+│   │   ├── ApiRoutesVisualization.jsx # ✅ API routes view
+│   │   ├── NodeDetailModal.jsx    # ✅ Double-click detail modal (dispatches to node type renderers)
+│   │   ├── NodeDetailModal.css    # ✅ Modal styling with full dark mode
+│   │   └── nodeDetails/           # ✅ Detail renderers per node type
+│   │       ├── TableNodeDetail.jsx      # Schema table: columns, relationships, FKs
+│   │       ├── FunctionNodeDetail.jsx   # Flow function: identity, callers/callees, control flow
+│   │       ├── BlueprintNodeDetail.jsx  # API blueprint: route listing, security summary
+│   │       └── RouteNodeDetail.jsx      # API route: full URL, params, security, siblings
 │   └── common/
 │       └── ProtectedRoute.jsx     # ✅ Auth guard
 ├── services/
 │   └── api.js                     # ✅ Axios instance with JWT + gitAPI + workspacesAPI
+├── utils/
+│   └── modalScrollLock.js         # ✅ Ref-counted body scroll lock (shared across all modals)
 ├── context/
 │   ├── AuthContext.jsx            # ✅ User auth state
 │   └── ThemeContext.jsx           # ✅ Light/Dark mode state
@@ -592,7 +611,7 @@ SOURCE (git-imported projects only)
 - PK indicator (key icon)
 - FK indicator (link icon)
 - Click to highlight related tables
-- Double-click for detailed view modal
+- Double-click for detailed view modal (NodeDetailModal — renders full context per node type)
 
 **Theme System (Implemented):**
 
@@ -1042,6 +1061,7 @@ code-visualizer/
 23. ✅ **GitHub API token support** — optional `GITHUB_TOKEN` env var for authenticated requests (5,000 req/hour vs 60 unauthenticated); applied to all git API service calls
 24. ✅ **Sticky notes in all views** — Runtime Flow and API Routes views now have sticky notes and full toolbar (zoom, add note, theme toggle); notes persist via layout save; excluded from dagre auto-layout; preserved during Quick Organize
 25. ✅ **Multi-language parser support** — 27 new parsers across 8 languages (Python, JS/TS, Java, C#, Ruby, Go, PHP, ABAP); modular directory structure (`parsers/schema/`, `parsers/flow/`, `parsers/routes/`); shared base classes with comment stripping, brace counting, and file discovery utilities; ParserManager rewritten with multi-language detection from manifest files; backward-compatible shim imports; zero new dependencies; 24 test fixtures covering all parsers; see `docs/plans/2026-02-12-multi-language-parsers.md` for full implementation details
+26. ✅ **Node Detail Modal** — double-click any node across all 3 visualization views to open expanded detail modal; 4 dedicated renderers (TableNodeDetail, FunctionNodeDetail, BlueprintNodeDetail, RouteNodeDetail) each look up full records from raw backend data via `contextData` prop; shared ref-counted `modalScrollLock.js` utility prevents body scroll leak when multiple modals overlap; full dark mode support; ESC/backdrop/close-button dismiss; see `docs/plans/2026-02-13-node-detail-modal.md` for full implementation details
 
 ## Next Steps
 

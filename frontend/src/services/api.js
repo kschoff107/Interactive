@@ -84,6 +84,10 @@ export const workspacesAPI = {
     api.delete(`/projects/${projectId}/workspaces/${workspaceId}/files/${fileId}`),
   importSourceFiles: (projectId, workspaceId, paths) =>
     api.post(`/projects/${projectId}/workspaces/${workspaceId}/import-source`, { paths }),
+  getCodeStructure: (projectId, workspaceId) =>
+    api.get(`/projects/${projectId}/workspaces/${workspaceId}/code-structure`),
+  analyzeCodeStructure: (projectId, workspaceId) =>
+    api.post(`/projects/${projectId}/workspaces/${workspaceId}/analyze/code-structure`),
 };
 
 // Git import endpoints

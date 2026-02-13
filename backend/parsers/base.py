@@ -455,3 +455,102 @@ class BaseRoutesParser:
             'protected_routes': protected,
             'unprotected_routes': len(self.routes) - protected,
         }
+
+
+class BaseStructureParser:
+    """Base class for code structure parsers."""
+
+    FILE_EXTENSIONS: List[str] = []
+
+    def __init__(self, project_path: str, options: Dict = None):
+        self.project_path = Path(project_path)
+        self.options = options or {}
+        self.modules: List[Dict] = []
+        self.classes: List[Dict] = []
+        self.imports: List[Dict] = []
+
+    def parse(self) -> Dict:
+        """Parse and return standardized code structure dict.
+
+        Subclasses must override this method.
+        """
+        raise NotImplementedError
+
+    def make_structure_result(self) -> Dict:
+        """Build standardized structure result from collected data."""
+        return {
+            'analysis_type': 'code_structure',
+            'version': '1.0',
+            'project_path': str(self.project_path),
+            'modules': self.modules,
+            'classes': self.classes,
+            'imports': self.imports,
+            'relationships': self._build_relationships(),
+            'statistics': self._calculate_statistics(),
+        }
+
+    def _build_relationships(self) -> List[Dict]:
+        """Build inheritance and composition relationships from collected classes."""
+        relationships = []
+        class_names = {c['name'] for c in self.classes}
+        class_by_name = {c['name']: c for c in self.classes}
+
+        for cls in self.classes:
+            for base in cls.get('base_classes', []):
+                if base in class_by_name:
+                    relationships.append({
+                        'source_id': cls['id'],
+                        'target_id': class_by_name[base]['id'],
+                        'type': 'inheritance',
+                        'label': 'extends',
+                    })
+
+            # Composition: type hints referencing other known classes
+            for prop in cls.get('properties', []):
+                type_name = prop.get('type') or ''
+                for wrapper in ['Optional[', 'List[', 'Set[', 'Dict[', 'Tuple[']:
+                    if type_name.startswith(wrapper):
+                        type_name = type_name[len(wrapper):-1].split(',')[0].strip()
+                if type_name in class_names and type_name != cls['name']:
+                    relationships.append({
+                        'source_id': cls['id'],
+                        'target_id': class_by_name[type_name]['id'],
+                        'type': 'composition',
+                        'label': prop['name'],
+                    })
+
+        return relationships
+
+    def _calculate_statistics(self) -> Dict:
+        """Calculate statistics about the analyzed code structure."""
+        total_methods = sum(len(c.get('methods', [])) for c in self.classes)
+        total_properties = sum(len(c.get('properties', [])) for c in self.classes)
+        abstract_classes = sum(1 for c in self.classes if c.get('is_abstract', False))
+        classes_with_bases = sum(1 for c in self.classes if c.get('base_classes'))
+
+        return {
+            'total_modules': len(self.modules),
+            'total_classes': len(self.classes),
+            'total_methods': total_methods,
+            'total_properties': total_properties,
+            'abstract_classes': abstract_classes,
+            'classes_with_inheritance': classes_with_bases,
+            'total_imports': len(self.imports),
+            'max_inheritance_depth': self._max_inheritance_depth(),
+        }
+
+    def _max_inheritance_depth(self) -> int:
+        """Calculate the deepest inheritance chain."""
+        class_by_name = {c['name']: c for c in self.classes}
+
+        def depth(name, seen):
+            if name not in class_by_name or name in seen:
+                return 0
+            seen.add(name)
+            bases = class_by_name[name].get('base_classes', [])
+            if not bases:
+                return 0
+            return 1 + max((depth(b, seen.copy()) for b in bases
+                            if b in class_by_name), default=0)
+
+        return max((depth(c['name'], set()) for c in self.classes), default=0)

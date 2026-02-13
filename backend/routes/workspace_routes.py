@@ -796,6 +796,102 @@ def analyze_workspace_api_routes(project_id, workspace_id):
             return jsonify({'error': 'API routes analysis failed. Please try again or contact support.'}), 500
 
 
+@workspaces_bp.route('/<int:project_id>/workspaces/<int:workspace_id>/code-structure', methods=['GET'])
+@jwt_required()
+def get_workspace_code_structure(project_id, workspace_id):
+    """Get code structure analysis for a specific workspace."""
+    user_id = int(get_jwt_identity())
+
+    with get_connection() as conn:
+        cur = conn.cursor()
+
+        if not verify_project_ownership(cur, project_id, user_id):
+            return jsonify({'error': 'Project not found'}), 404
+
+        cur.execute(
+            '''SELECT * FROM analysis_results
+               WHERE workspace_id = %s AND analysis_type = %s
+               ORDER BY created_at DESC LIMIT 1''',
+            (workspace_id, 'code_structure')
+        )
+        analysis_data = cur.fetchone()
+
+    if not analysis_data:
+        return jsonify({'error': 'No code structure analysis found'}), 404
+
+    try:
+        parsed_result = json.loads(analysis_data['result_data'])
+    except (json.JSONDecodeError, TypeError) as e:
+        logger.error('Corrupt code structure data for workspace %s: %s', workspace_id, e)
+        return jsonify({'error': 'Stored analysis data is corrupted. Try re-running the analysis.'}), 500
+
+    return jsonify({
+        'analysis_id': analysis_data['id'],
+        'structure': parsed_result,
+        'created_at': analysis_data['created_at']
+    }), 200
+
+
+@workspaces_bp.route('/<int:project_id>/workspaces/<int:workspace_id>/analyze/code-structure', methods=['POST'])
+@jwt_required()
+def analyze_workspace_code_structure(project_id, workspace_id):
+    """Run code structure analysis on workspace files."""
+    user_id = int(get_jwt_identity())
+
+    with get_connection() as conn:
+        cur = conn.cursor()
+
+        project = verify_project_ownership(cur, project_id, user_id)
+        if not project:
+            return jsonify({'error': 'Project not found'}), 404
+
+        if not verify_workspace(cur, workspace_id, project_id):
+            return jsonify({'error': 'Workspace not found'}), 404
+
+        ws_dir = get_workspace_file_dir(user_id, project_id, workspace_id)
+
+        cur.execute(
+            'SELECT COUNT(*) as count FROM workspace_files WHERE workspace_id = %s',
+            (workspace_id,)
+        )
+        file_count = cur.fetchone()['count']
+
+        if file_count == 0 or not os.path.exists(ws_dir):
+            return jsonify({
+                'error': 'No files in this workspace. Upload files first before analyzing.'
+            }), 400
+
+        try:
+            manager = ParserManager()
+            structure_data = manager.parse_code_structure(ws_dir)
+
+            cur.execute(
+                'DELETE FROM analysis_results WHERE workspace_id = %s AND analysis_type = %s',
+                (workspace_id, 'code_structure')
+            )
+
+            cur.execute(
+                '''INSERT INTO analysis_results (project_id, analysis_type, result_data, workspace_id)
+                   VALUES (%s, %s, %s, %s)''',
+                (project_id, 'code_structure', json.dumps(structure_data), workspace_id)
+            )
+
+            conn.commit()
+
+            return jsonify({
+                'message': 'Code structure analysis completed',
+                'structure': structure_data
+            }), 200
+
+        except UnsupportedFrameworkError as e:
+            conn.rollback()
+            return jsonify({'error': str(e)}), 400
+        except Exception as e:
+            conn.rollback()
+            logger.exception('Code structure analysis failed for workspace %s', workspace_id)
+            return jsonify({'error': 'Code structure analysis failed. Please try again or contact support.'}), 500
+
+
 @workspaces_bp.route('/<int:project_id>/workspaces/<int:workspace_id>/analyze/database-schema', methods=['POST'])
 @jwt_required()
 def analyze_workspace_database_schema(project_id, workspace_id):

@@ -288,6 +288,33 @@ class ParserManager:
         return None
 
     # -----------------------------------------------------------------------
+    # Code structure parsing
+    # -----------------------------------------------------------------------
+
+    def parse_code_structure(self, project_path: str, options: Dict = None) -> Dict:
+        """Parse source code to extract class/module structure.
+
+        Detects language and routes to appropriate structure parser.
+        """
+        parser = self._get_structure_parser(project_path, options)
+        if parser:
+            return parser.parse()
+
+        raise UnsupportedFrameworkError(
+            "No supported source files found for code structure analysis. "
+            "Supported: Python (.py), JavaScript/TypeScript (.js/.ts/.jsx/.tsx)")
+
+    def _get_structure_parser(self, project_path: str, options: Dict = None):
+        """Return the appropriate structure parser for the project."""
+        if self._has_python_files(project_path):
+            from .structure.python_structure_parser import PythonStructureParser
+            return PythonStructureParser(project_path, options)
+        if find_source_files(project_path, ['.js', '.ts', '.jsx', '.tsx']):
+            from .structure.js_structure_parser import JSStructureParser
+            return JSStructureParser(project_path, options)
+        return None
+
+    # -----------------------------------------------------------------------
     # File and language detection helpers
     # -----------------------------------------------------------------------
 

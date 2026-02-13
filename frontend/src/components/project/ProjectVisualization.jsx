@@ -19,6 +19,7 @@ import { StickyNoteButton, ThemeToggleButton } from './ToolbarButtons';
 import Sidebar from './Sidebar';
 import FlowVisualization from './FlowVisualization';
 import ApiRoutesVisualization from './ApiRoutesVisualization';
+import CodeStructureVisualization from './CodeStructureVisualization';
 import CenterUploadArea from './CenterUploadArea';
 import ResizeHandle from './ResizeHandle';
 import NodeDetailModal from './NodeDetailModal';
@@ -52,6 +53,12 @@ export default function ProjectVisualization() {
   const [apiRoutesLoading, setApiRoutesLoading] = useState(false);
   const [apiRoutesLayoutTrigger, setApiRoutesLayoutTrigger] = useState(0);
 
+  // Code structure state
+  const [codeStructureData, setCodeStructureData] = useState(null);
+  const [isAnalyzingStructure, setIsAnalyzingStructure] = useState(false);
+  const [structureLoading, setStructureLoading] = useState(false);
+  const [structureLayoutTrigger, setStructureLayoutTrigger] = useState(0);
+
   // Project status state
   const [projectStatus, setProjectStatus] = useState({
     has_database_schema: false,
@@ -67,10 +74,12 @@ export default function ProjectVisualization() {
   // Refs to store child component nodes for layout save
   const flowNodesRef = useRef([]);
   const apiNodesRef = useRef([]);
+  const structureNodesRef = useRef([]);
 
   // Memoized callbacks for child visualization components
   const handleFlowNodesUpdate = useCallback((n) => { flowNodesRef.current = n; }, []);
   const handleApiNodesUpdate = useCallback((n) => { apiNodesRef.current = n; }, []);
+  const handleStructureNodesUpdate = useCallback((n) => { structureNodesRef.current = n; }, []);
   const handleChildNodesDragged = useCallback(() => setHasUnsavedChanges(true), []);
 
   // Schema data (raw) for node detail modal
@@ -125,11 +134,11 @@ export default function ProjectVisualization() {
 
   // Helper mappings
   const viewToAnalysisType = (view) => {
-    const map = { schema: 'database_schema', flow: 'runtime_flow', api: 'api_routes' };
+    const map = { schema: 'database_schema', flow: 'runtime_flow', api: 'api_routes', structure: 'code_structure' };
     return map[view];
   };
   const analysisTypeToView = (at) => {
-    const map = { database_schema: 'schema', runtime_flow: 'flow', api_routes: 'api' };
+    const map = { database_schema: 'schema', runtime_flow: 'flow', api_routes: 'api', code_structure: 'structure' };
     return map[at];
   };
 
@@ -164,6 +173,7 @@ export default function ProjectVisualization() {
     if (workspaceId !== activeWorkspaceId) {
       setRuntimeFlowData(null);
       setApiRoutesData(null);
+      setCodeStructureData(null);
       setNodes([]);
       setEdges([]);
       setHasUnsavedChanges(false);
@@ -185,6 +195,7 @@ export default function ProjectVisualization() {
       // Clear data for fresh workspace
       setRuntimeFlowData(null);
       setApiRoutesData(null);
+      setCodeStructureData(null);
       setNodes([]);
       setEdges([]);
       setHasUnsavedChanges(false);
@@ -213,6 +224,7 @@ export default function ProjectVisualization() {
         const remaining = (workspaces[at] || []).filter(ws => ws.id !== workspaceId);
         setRuntimeFlowData(null);
         setApiRoutesData(null);
+        setCodeStructureData(null);
         setNodes([]);
         setEdges([]);
         setHasUnsavedChanges(false);
@@ -245,6 +257,7 @@ export default function ProjectVisualization() {
       setActiveWorkspaceId(newWs.id);
       setRuntimeFlowData(null);
       setApiRoutesData(null);
+      setCodeStructureData(null);
       setNodes([]);
       setEdges([]);
       setHasUnsavedChanges(false);
@@ -267,6 +280,7 @@ export default function ProjectVisualization() {
       if (workspaceId === activeWorkspaceId) {
         setRuntimeFlowData(null);
         setApiRoutesData(null);
+        setCodeStructureData(null);
         setNodes([]);
         setEdges([]);
         setHasUnsavedChanges(false);
@@ -310,6 +324,9 @@ export default function ProjectVisualization() {
     } else if (activeView === 'api') {
       loadApiRoutesData();
       loadWorkspaceLayout();
+    } else if (activeView === 'structure') {
+      loadCodeStructureData();
+      loadWorkspaceLayout();
     } else if (activeView === 'schema') {
       loadSchemaForWorkspace();
     }
@@ -323,6 +340,7 @@ export default function ProjectVisualization() {
     }
     if (activeView === 'flow') return !runtimeFlowData && !flowLoading && !isAnalyzing;
     if (activeView === 'api') return !apiRoutesData && !apiRoutesLoading && !isAnalyzingRoutes;
+    if (activeView === 'structure') return !codeStructureData && !structureLoading && !isAnalyzingStructure;
     return false;
   })();
 
@@ -573,6 +591,7 @@ export default function ProjectVisualization() {
     if (activeView === 'schema' && nodes.length === 0) return;
     if (activeView === 'flow' && !runtimeFlowData) return;
     if (activeView === 'api' && !apiRoutesData) return;
+    if (activeView === 'structure' && !codeStructureData) return;
 
     setIsLayouting(true);
 
@@ -601,6 +620,11 @@ export default function ProjectVisualization() {
       setApiRoutesLayoutTrigger(prev => prev + 1);
       setTimeout(() => setIsLayouting(false), 300);
       toast.success('Layout organized!');
+    } else if (activeView === 'structure') {
+      // Trigger re-layout in CodeStructureVisualization component
+      setStructureLayoutTrigger(prev => prev + 1);
+      setTimeout(() => setIsLayouting(false), 300);
+      toast.success('Layout organized!');
     }
   };
 
@@ -626,6 +650,8 @@ export default function ProjectVisualization() {
       layoutNodes = flowNodesRef.current;
     } else if (activeView === 'api') {
       layoutNodes = apiNodesRef.current;
+    } else if (activeView === 'structure') {
+      layoutNodes = structureNodesRef.current;
     } else {
       layoutNodes = nodes;
     }
@@ -734,6 +760,40 @@ export default function ProjectVisualization() {
     }
   };
 
+  const loadCodeStructureData = async () => {
+    if (structureLoading) return;
+
+    setStructureLoading(true);
+    setCodeStructureData(null);
+    try {
+      const response = await workspacesAPI.getCodeStructure(projectId, activeWorkspaceId);
+      setCodeStructureData(response.data.structure);
+    } catch (error) {
+      if (error.response?.status === 404) {
+        console.log('No code structure analysis found');
+      } else {
+        console.error('Failed to load code structure:', error);
+      }
+    } finally {
+      setStructureLoading(false);
+    }
+  };
+
+  const handleAnalyzeCodeStructure = async () => {
+    setIsAnalyzingStructure(true);
+    try {
+      const response = await workspacesAPI.analyzeCodeStructure(projectId, activeWorkspaceId);
+      setCodeStructureData(response.data.structure);
+      toast.success('Code structure analysis completed');
+    } catch (error) {
+      const errorMsg = error.response?.data?.error || 'Failed to analyze code structure';
+      toast.error(errorMsg);
+      console.error('Code structure analysis error:', error);
+    } finally {
+      setIsAnalyzingStructure(false);
+    }
+  };
+
   const loadSchemaForWorkspace = async () => {
     if (!activeWorkspaceId) return;
     try {
@@ -772,6 +832,8 @@ export default function ProjectVisualization() {
         await handleAnalyzeRuntimeFlow();
       } else if (activeView === 'api') {
         await handleAnalyzeApiRoutes();
+      } else if (activeView === 'structure') {
+        await handleAnalyzeCodeStructure();
       } else if (activeView === 'schema') {
         // Analyze schema files in workspace, then load results
         try {
@@ -903,8 +965,34 @@ export default function ProjectVisualization() {
             </button>
           )}
 
-          {/* Layout Controls - Show for schema, flow, and api views */}
-          {((activeView === 'schema' && nodes.length > 0) || (activeView === 'flow' && runtimeFlowData) || (activeView === 'api' && apiRoutesData)) && (
+          {/* Code Structure Analysis Button */}
+          {activeView === 'structure' && (
+            <button
+              onClick={handleAnalyzeCodeStructure}
+              disabled={isAnalyzingStructure}
+              className="px-4 py-2 bg-indigo-600 dark:bg-indigo-700 text-white rounded hover:bg-indigo-700 dark:hover:bg-indigo-800 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            >
+              {isAnalyzingStructure ? (
+                <>
+                  <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                  Analyzing...
+                </>
+              ) : (
+                <>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                  </svg>
+                  Analyze Code Structure
+                </>
+              )}
+            </button>
+          )}
+
+          {/* Layout Controls - Show for schema, flow, api, and structure views */}
+          {((activeView === 'schema' && nodes.length > 0) || (activeView === 'flow' && runtimeFlowData) || (activeView === 'api' && apiRoutesData) || (activeView === 'structure' && codeStructureData)) && (
             <>
               <button
                 onClick={handleQuickOrganize}
@@ -1112,6 +1200,31 @@ export default function ProjectVisualization() {
               </>
             )}
 
+            {activeView === 'structure' && (
+              <>
+                {isWorkspaceEmpty ? (
+                  <CenterUploadArea
+                    projectId={projectId}
+                    workspaceId={activeWorkspaceId}
+                    analysisType="code_structure"
+                    onUploadComplete={handleUploadComplete}
+                    onImportSourceFiles={handleImportSourceFiles}
+                  />
+                ) : (
+                  <CodeStructureVisualization
+                    structureData={codeStructureData}
+                    isDark={isDark}
+                    onToggleTheme={toggleTheme}
+                    layoutTrigger={structureLayoutTrigger}
+                    projectId={projectId}
+                    savedLayout={workspaceLayout}
+                    onNodesUpdate={handleStructureNodesUpdate}
+                    onNodesDragged={handleChildNodesDragged}
+                  />
+                )}
+              </>
+            )}
+
             {/* Node Detail Modal — shared across all views */}
             <NodeDetailModal
               isOpen={!!detailNode}
@@ -1122,21 +1235,6 @@ export default function ProjectVisualization() {
               contextData={{ schema: schemaData }}
             />
 
-            {activeView !== 'schema' && activeView !== 'flow' && activeView !== 'api' && (
-              <div className="flex items-center justify-center h-full">
-                <div className="text-center">
-                  <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                  </svg>
-                  <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-gray-100">
-                    Coming Soon
-                  </h3>
-                  <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                    This visualization type is under development
-                  </p>
-                </div>
-              </div>
-            )}
           </div>
 
           {/* Info Panel */}
