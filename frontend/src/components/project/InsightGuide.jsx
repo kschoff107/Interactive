@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import AnalysisTab from './AnalysisTab';
 import { generateBasicAnalysis } from '../../utils/basicAnalysis';
 import api from '../../services/api';
+import { lockScroll, unlockScroll } from '../../utils/modalScrollLock';
 import './InsightGuide.css';
 
 const InsightGuide = ({ isOpen, onClose, isDark, flowData, projectId }) => {
@@ -23,12 +24,12 @@ const InsightGuide = ({ isOpen, onClose, isDark, flowData, projectId }) => {
 
     if (isOpen) {
       window.addEventListener('keydown', handleEsc);
-      document.body.style.overflow = 'hidden';
+      lockScroll();
     }
 
     return () => {
       window.removeEventListener('keydown', handleEsc);
-      document.body.style.overflow = 'unset';
+      if (isOpen) unlockScroll();
     };
   }, [isOpen, onClose]);
 

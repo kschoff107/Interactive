@@ -21,6 +21,7 @@ import FlowVisualization from './FlowVisualization';
 import ApiRoutesVisualization from './ApiRoutesVisualization';
 import CenterUploadArea from './CenterUploadArea';
 import ResizeHandle from './ResizeHandle';
+import NodeDetailModal from './NodeDetailModal';
 
 // Register custom node types
 const nodeTypes = {
@@ -71,6 +72,11 @@ export default function ProjectVisualization() {
   const handleFlowNodesUpdate = useCallback((n) => { flowNodesRef.current = n; }, []);
   const handleApiNodesUpdate = useCallback((n) => { apiNodesRef.current = n; }, []);
   const handleChildNodesDragged = useCallback(() => setHasUnsavedChanges(true), []);
+
+  // Schema data (raw) for node detail modal
+  const [schemaData, setSchemaData] = useState(null);
+  const [detailNode, setDetailNode] = useState(null);
+  const handleDetailClose = useCallback(() => setDetailNode(null), []);
 
   // Saved layout for flow/api views
   const [workspaceLayout, setWorkspaceLayout] = useState(null);
@@ -368,6 +374,8 @@ export default function ProjectVisualization() {
       return;
     }
 
+    setSchemaData(schema);
+
     const newNodes = [];
     const newEdges = [];
     const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
@@ -393,6 +401,7 @@ export default function ProjectVisualization() {
               </div>
             </div>
           ),
+          tableName: table.name,
           columns: table.columns, // Store for height estimation
         },
         position: { x, y },
@@ -446,6 +455,8 @@ export default function ProjectVisualization() {
       return;
     }
 
+    setSchemaData(schema);
+
     const newNodes = [];
     const newEdges = [];
     const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
@@ -468,6 +479,7 @@ export default function ProjectVisualization() {
               </div>
             </div>
           ),
+          tableName: table.name,
           columns: table.columns,
         },
         position: { x: 0, y: 0 }, // Will be updated by applySavedLayout
@@ -778,6 +790,12 @@ export default function ProjectVisualization() {
     await loadWorkspaces();
   };
 
+  // Handle double-click on schema nodes to show detail
+  const handleSchemaNodeDoubleClick = useCallback((event, node) => {
+    if (node.type === 'stickyNote' || !node.data?.tableName) return;
+    setDetailNode(node);
+  }, []);
+
   // Persist sidebar width
   useEffect(() => {
     localStorage.setItem('sidebarWidth', sidebarWidth.toString());
@@ -1028,6 +1046,7 @@ export default function ProjectVisualization() {
                       onNodesChange={handleNodesChange}
                       onEdgesChange={onEdgesChange}
                       onConnect={onConnect}
+                      onNodeDoubleClick={handleSchemaNodeDoubleClick}
                       fitView
                       nodeTypes={nodeTypes}
                     >
@@ -1092,6 +1111,16 @@ export default function ProjectVisualization() {
                 )}
               </>
             )}
+
+            {/* Node Detail Modal — shared across all views */}
+            <NodeDetailModal
+              isOpen={!!detailNode}
+              onClose={handleDetailClose}
+              isDark={isDark}
+              node={detailNode}
+              edges={edges}
+              contextData={{ schema: schemaData }}
+            />
 
             {activeView !== 'schema' && activeView !== 'flow' && activeView !== 'api' && (
               <div className="flex items-center justify-center h-full">

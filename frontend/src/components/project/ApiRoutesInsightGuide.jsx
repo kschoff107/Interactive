@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import ApiRoutesAnalysisTab from './ApiRoutesAnalysisTab';
 import api from '../../services/api';
+import { lockScroll, unlockScroll } from '../../utils/modalScrollLock';
 import './InsightGuide.css';
 
 const ApiRoutesInsightGuide = ({ isOpen, onClose, isDark, routesData, projectId }) => {
@@ -22,12 +23,12 @@ const ApiRoutesInsightGuide = ({ isOpen, onClose, isDark, routesData, projectId 
 
     if (isOpen) {
       window.addEventListener('keydown', handleEsc);
-      document.body.style.overflow = 'hidden';
+      lockScroll();
     }
 
     return () => {
       window.removeEventListener('keydown', handleEsc);
-      document.body.style.overflow = 'unset';
+      if (isOpen) unlockScroll();
     };
   }, [isOpen, onClose]);
 

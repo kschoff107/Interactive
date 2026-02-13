@@ -14,6 +14,7 @@ import BlueprintNode from './nodes/BlueprintNode';
 import StickyNote from './StickyNote';
 import { StickyNoteButton, ThemeToggleButton } from './ToolbarButtons';
 import ApiRoutesInsightGuide from './ApiRoutesInsightGuide';
+import NodeDetailModal from './NodeDetailModal';
 import { transformApiRoutesData, estimateRouteNodeHeight, getRouteNodeWidth } from '../../utils/apiRoutesTransform';
 import { applySavedLayout } from '../../utils/layoutUtils';
 import { useStickyNotes, restoreStickyNotesFromLayout } from '../../hooks/useStickyNotes';
@@ -85,6 +86,8 @@ export default function ApiRoutesVisualization({ routesData, isDark, onToggleThe
   const [initialEdges, setInitialEdges] = useState([]);
   const [methodFilter, setMethodFilter] = useState(null);
   const [showInsightGuide, setShowInsightGuide] = useState(false);
+  const [detailNode, setDetailNode] = useState(null);
+  const handleDetailClose = useCallback(() => setDetailNode(null), []);
 
   // Wrap onNodesChange to detect drag completions
   const onNodesChange = useCallback((changes) => {
@@ -146,6 +149,12 @@ export default function ApiRoutesVisualization({ routesData, isDark, onToggleThe
       setEdges(layoutedEdges);
     }
   }, [layoutTrigger, initialNodes, initialEdges, setNodes, setEdges]);
+
+  // Handle double-click to show node detail
+  const handleNodeDoubleClick = useCallback((event, node) => {
+    if (node.type === 'stickyNote') return;
+    setDetailNode(node);
+  }, []);
 
   const statistics = routesData?.statistics ?? null;
 
@@ -249,6 +258,7 @@ export default function ApiRoutesVisualization({ routesData, isDark, onToggleThe
         onNodeMouseLeave={onNodeMouseLeave}
         onEdgeMouseEnter={onEdgeMouseEnter}
         onEdgeMouseLeave={onEdgeMouseLeave}
+        onNodeDoubleClick={handleNodeDoubleClick}
         nodeTypes={nodeTypes}
         fitView
         fitViewOptions={{ padding: 0.2, maxZoom: 1 }}
@@ -393,6 +403,16 @@ export default function ApiRoutesVisualization({ routesData, isDark, onToggleThe
         isDark={isDark}
         routesData={routesData}
         projectId={projectId}
+      />
+
+      {/* Node Detail Modal */}
+      <NodeDetailModal
+        isOpen={!!detailNode}
+        onClose={handleDetailClose}
+        isDark={isDark}
+        node={detailNode}
+        edges={edges}
+        contextData={{ routesData }}
       />
     </div>
   );

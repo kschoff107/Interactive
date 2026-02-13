@@ -16,6 +16,7 @@ import TryNode from './nodes/TryNode';
 import StickyNote from './StickyNote';
 import { StickyNoteButton, ThemeToggleButton } from './ToolbarButtons';
 import InsightGuide from './InsightGuide';
+import NodeDetailModal from './NodeDetailModal';
 import { transformFlowData, estimateFlowNodeHeight, getFlowNodeWidth } from '../../utils/flowTransform';
 import { detectCircularEdges, applySavedLayout } from '../../utils/layoutUtils';
 import { useStickyNotes, restoreStickyNotesFromLayout } from '../../hooks/useStickyNotes';
@@ -109,6 +110,8 @@ export default function FlowVisualization({ flowData, isDark, onToggleTheme, lay
   const [initialNodes, setInitialNodes] = useState([]);
   const [initialEdges, setInitialEdges] = useState([]);
   const [showInsightGuide, setShowInsightGuide] = useState(false);
+  const [detailNode, setDetailNode] = useState(null);
+  const handleDetailClose = useCallback(() => setDetailNode(null), []);
 
   // Wrap onNodesChange to detect drag completions
   const onNodesChange = useCallback((changes) => {
@@ -181,6 +184,12 @@ export default function FlowVisualization({ flowData, isDark, onToggleTheme, lay
     }
   }, [layoutTrigger, initialNodes, initialEdges, setNodes, setEdges]);
 
+  // Handle double-click to show node detail
+  const handleNodeDoubleClick = useCallback((event, node) => {
+    if (node.type === 'stickyNote') return;
+    setDetailNode(node);
+  }, []);
+
   const statistics = flowData?.statistics ?? null;
 
   if (!flowData || nodes.length === 0) {
@@ -222,6 +231,7 @@ export default function FlowVisualization({ flowData, isDark, onToggleTheme, lay
         onNodeMouseLeave={onNodeMouseLeave}
         onEdgeMouseEnter={onEdgeMouseEnter}
         onEdgeMouseLeave={onEdgeMouseLeave}
+        onNodeDoubleClick={handleNodeDoubleClick}
         nodeTypes={nodeTypes}
         fitView
         fitViewOptions={{ padding: 0.2, maxZoom: 1 }}
@@ -327,6 +337,16 @@ export default function FlowVisualization({ flowData, isDark, onToggleTheme, lay
         isDark={isDark}
         flowData={flowData}
         projectId={projectId}
+      />
+
+      {/* Node Detail Modal */}
+      <NodeDetailModal
+        isOpen={!!detailNode}
+        onClose={handleDetailClose}
+        isDark={isDark}
+        node={detailNode}
+        edges={edges}
+        contextData={{ flowData }}
       />
     </div>
   );
