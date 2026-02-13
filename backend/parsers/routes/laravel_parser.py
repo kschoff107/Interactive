@@ -12,27 +12,8 @@ from typing import Dict, List, Optional, Tuple
 
 from ..base import (
     BaseRoutesParser, find_source_files, read_file_safe,
-    extract_block_body, line_number_at,
+    extract_block_body, line_number_at, strip_comments_only,
 )
-
-# Custom comment-only stripping for PHP that preserves string literals.
-# Laravel route definitions use strings extensively for paths, controller
-# references, and middleware names. Standard strip_comments('php') removes
-# these strings, making the routes unparseable.
-_PHP_COMMENT_ONLY_RE = re.compile(
-    r'//[^\n]*'             # single-line //
-    r'|#[^\n]*'             # single-line #
-    r'|/\*.*?\*/',          # multi-line /* */
-    re.DOTALL,
-)
-
-
-def _strip_php_comments_only(content: str) -> str:
-    """Strip PHP comments while preserving string literals."""
-    return _PHP_COMMENT_ONLY_RE.sub(
-        lambda m: re.sub(r'[^\n]', ' ', m.group(0)),
-        content,
-    )
 
 # ---------------------------------------------------------------------------
 # Compiled regex patterns
@@ -163,7 +144,7 @@ class LaravelParser(BaseRoutesParser):
 
     def _parse_routes_file(self, content: str, file_path: str):
         """Parse a single route file."""
-        stripped = _strip_php_comments_only(content)
+        stripped = strip_comments_only(content, 'php')
         self._parse_block(stripped, content, file_path, prefix='', auth=False)
 
     def _parse_block(self, stripped: str, original: str, file_path: str,

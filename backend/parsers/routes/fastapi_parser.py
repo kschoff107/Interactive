@@ -7,10 +7,13 @@ dependency injection (Depends), and path/query parameter definitions.
 """
 
 import ast
+import logging
 import os
 import re
 from pathlib import Path
 from typing import Dict, List, Optional, Set, Tuple
+
+logger = logging.getLogger(__name__)
 
 
 # Known auth-related dependency names (heuristic detection)
@@ -543,9 +546,9 @@ class FastAPIParser:
             return visitor
 
         except SyntaxError as e:
-            print(f"Syntax error in {filepath}: {e}")
+            logger.warning("Failed to parse %s: %s", filepath, e)
         except Exception as e:
-            print(f"Error parsing {filepath}: {e}")
+            logger.warning("Failed to parse %s: %s", filepath, e)
         return None
 
     def _apply_include_prefixes(self, visitors: List[FastAPIRouteVisitor]):

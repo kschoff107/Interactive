@@ -10,6 +10,7 @@ Uses regex on comment-stripped source to detect:
   - Entry points (Express handlers, export default, module.exports)
 """
 
+import logging
 import os
 import re
 from pathlib import Path
@@ -23,6 +24,8 @@ from ..base import (
     read_file_safe,
     strip_comments,
 )
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Compiled regex patterns
@@ -117,7 +120,8 @@ class JSFlowParser(BaseFlowParser):
                 continue
             try:
                 self._parse_file(content, fpath)
-            except Exception:
+            except Exception as e:
+                logger.warning("Failed to parse %s: %s", fpath, e)
                 continue
 
         # Resolve call targets

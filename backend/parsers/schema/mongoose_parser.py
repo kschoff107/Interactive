@@ -11,6 +11,7 @@ because strip_comments replaces string literals with whitespace, preventing
 extraction of model names, ref targets, and enum values.
 """
 
+import logging
 import os
 import re
 from typing import Dict, List, Optional, Tuple
@@ -21,14 +22,17 @@ from ..base import (
     find_source_files,
     line_number_at,
     read_file_safe,
+    strip_comments,
+    strip_comments_only,
 )
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Compiled regex patterns
 # ---------------------------------------------------------------------------
 
-# Single-line comment for manual stripping (preserves string literals)
-_RE_LINE_COMMENT = re.compile(r'//[^\n]*')
+
 
 # Schema variable assignment: const xxxSchema = new Schema({ or new mongoose.Schema({
 _RE_SCHEMA_ASSIGN = re.compile(
@@ -114,7 +118,8 @@ class MongooseParser(BaseSchemaParser):
                 tables, rels = self._parse_file(content, fpath)
                 all_tables.extend(tables)
                 all_relationships.extend(rels)
-            except Exception:
+            except Exception as e:
+                logger.warning("Failed to parse %s: %s", fpath, e)
                 continue
 
         return self.make_schema_result(all_tables, all_relationships)
@@ -128,10 +133,14 @@ class MongooseParser(BaseSchemaParser):
     ) -> Tuple[List[Dict], List[Dict]]:
         """Parse a single JS/TS file for Mongoose schemas and models.
 
-        Uses original content with only line comments stripped so that
-        string literals (model names, ref targets) are preserved.
+        Dual-content strategy:
+        - comment_clean: comments stripped, strings preserved — for regex matching
+        - fully_stripped: comments AND strings stripped — for brace counting
+        Both preserve character positions, so offsets are interchangeable.
         """
-        cleaned = _RE_LINE_COMMENT.sub('', content)
+        comment_clean = strip_comments_only(content, 'javascript')
+        fully_stripped = strip_comments(content, 'javascript')
+
         tables: List[Dict] = []
         relationships: List[Dict] = []
 
@@ -139,12 +148,14 @@ class MongooseParser(BaseSchemaParser):
         schema_vars: Dict[str, Dict] = {}
 
         # Find all schema definitions
-        for m in _RE_SCHEMA_ASSIGN.finditer(cleaned):
+        for m in _RE_SCHEMA_ASSIGN.finditer(comment_clean):
             var_name = m.group(1)
-            # Extract the schema body (first arg to new Schema())
-            body, bs, be = extract_block_body(cleaned, m.end() - 1)
+            # Brace counting on fully stripped (no {/} in strings)
+            _, bs, be = extract_block_body(fully_stripped, m.end() - 1)
             if bs < 0:
                 continue
+            # Extract body from comment_clean for value parsing
+            body = comment_clean[bs:be]
             columns, fks, rels = self._parse_schema_body(body)
             schema_vars[var_name] = {
                 'columns': columns,
@@ -155,17 +166,17 @@ class MongooseParser(BaseSchemaParser):
 
         # Map schemas to model names via mongoose.model() calls
         model_map: Dict[str, str] = {}  # schema_var -> model_name
-        for m in _RE_MODEL_REGISTER.finditer(cleaned):
+        for m in _RE_MODEL_REGISTER.finditer(comment_clean):
             model_name = m.group(1)
             schema_var = m.group(2)
             model_map[schema_var] = model_name
 
-        for m in _RE_EXPORT_MODEL.finditer(cleaned):
+        for m in _RE_EXPORT_MODEL.finditer(comment_clean):
             model_name = m.group(1)
             schema_var = m.group(2)
             model_map[schema_var] = model_name
 
-        for m in _RE_CONST_MODEL.finditer(cleaned):
+        for m in _RE_CONST_MODEL.finditer(comment_clean):
             model_name = m.group(1)
             schema_var = m.group(2)
             model_map[schema_var] = model_name

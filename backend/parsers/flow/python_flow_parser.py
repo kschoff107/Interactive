@@ -5,9 +5,14 @@ Uses Python's AST module for static code analysis without executing code.
 """
 
 import ast
+import logging
 import os
 from pathlib import Path
 from typing import Dict, List, Optional, Set, Tuple
+
+from ..base import BaseFlowParser, find_source_files
+
+logger = logging.getLogger(__name__)
 
 
 class FlowVisitor(ast.NodeVisitor):
@@ -305,85 +310,25 @@ class FlowVisitor(ast.NodeVisitor):
         return complexity
 
 
-class RuntimeFlowParser:
+class RuntimeFlowParser(BaseFlowParser):
     """Parse Python source code to extract runtime flow information."""
 
-    def __init__(self, project_path: str, options: Optional[Dict] = None):
-        """
-        Initialize parser with project directory.
+    FILE_EXTENSIONS = ['.py']
 
-        Args:
-            project_path: Root directory of Python project
-            options: Configuration options (entry_points, max_depth, etc.)
-        """
-        self.project_path = Path(project_path)
-        self.options = options or {}
-        self.functions = []
-        self.calls = []
-        self.control_flows = []
-        self.modules = []
+    def __init__(self, project_path: str, options: Optional[Dict] = None):
+        super().__init__(project_path, options)
         self.all_imports = {}
 
     def parse(self) -> Dict:
-        """
-        Main parsing method - orchestrates the analysis.
+        """Parse all Python files and return standardized flow result."""
+        python_files = find_source_files(str(self.project_path), self.FILE_EXTENSIONS)
 
-        Returns:
-            {
-                'functions': [...],
-                'calls': [...],
-                'control_flows': [...],
-                'modules': [...],
-                'entry_points': [...],
-                'statistics': {...}
-            }
-        """
-        # Find all Python files
-        python_files = self._find_python_files()
-
-        # Parse each file
         for filepath in python_files:
-            self._parse_file(filepath)
+            self._parse_file(Path(filepath))
 
-        # Resolve function calls
         self._resolve_calls()
 
-        # Detect entry points
-        entry_points = self._detect_entry_points()
-
-        # Calculate statistics
-        statistics = self._calculate_statistics()
-
-        return {
-            'analysis_type': 'runtime_flow',
-            'version': '1.0',
-            'project_path': str(self.project_path),
-            'modules': self.modules,
-            'functions': self.functions,
-            'calls': self.calls,
-            'control_flows': self.control_flows,
-            'entry_points': entry_points,
-            'statistics': statistics
-        }
-
-    def _find_python_files(self) -> List[Path]:
-        """Find all Python files in the project directory."""
-        python_files = []
-
-        # Walk through project directory
-        for root, dirs, files in os.walk(self.project_path):
-            # Skip common non-source directories
-            dirs[:] = [d for d in dirs if d not in [
-                '__pycache__', '.git', '.venv', 'venv', 'node_modules',
-                '.pytest_cache', '.tox', 'dist', 'build', '.eggs'
-            ]]
-
-            for file in files:
-                if file.endswith('.py'):
-                    filepath = Path(root) / file
-                    python_files.append(filepath)
-
-        return python_files
+        return self.make_flow_result()
 
     def _parse_file(self, filepath: Path):
         """Parse a single Python file."""
@@ -418,30 +363,9 @@ class RuntimeFlowParser:
             })
 
         except SyntaxError as e:
-            print(f"Syntax error in {filepath}: {e}")
+            logger.warning("Failed to parse %s: %s", filepath, e)
         except Exception as e:
-            print(f"Error parsing {filepath}: {e}")
-
-    def _resolve_calls(self):
-        """Resolve function calls to their definitions."""
-        # Create function lookup by name
-        func_by_name = {}
-        for func in self.functions:
-            func_by_name[func['name']] = func
-            func_by_name[func['qualified_name']] = func
-
-        # Resolve each call
-        for call in self.calls:
-            callee_name = call['callee_name']
-
-            # Try to find the called function
-            if callee_name in func_by_name:
-                call['callee_id'] = func_by_name[callee_name]['id']
-                call['call_type'] = 'direct'
-            else:
-                # Mark as external or unresolved
-                call['callee_id'] = f"external_{callee_name}"
-                call['call_type'] = 'external'
+            logger.warning("Failed to parse %s: %s", filepath, e)
 
     def _detect_entry_points(self) -> List[Dict]:
         """Identify entry points (main blocks, Flask routes, etc.)."""
@@ -472,96 +396,3 @@ class RuntimeFlowParser:
                 })
 
         return entry_points
-
-    def _calculate_statistics(self) -> Dict:
-        """Calculate statistics about the analyzed code."""
-        # Find circular dependencies (simplified check)
-        circular_deps = self._detect_circular_dependencies()
-
-        # Find orphan functions (never called)
-        called_func_ids = {call['callee_id'] for call in self.calls if call['call_type'] == 'direct'}
-        all_func_ids = {func['id'] for func in self.functions}
-        orphan_funcs = list(all_func_ids - called_func_ids)
-
-        # Calculate max call depth (simplified)
-        max_depth = self._calculate_max_depth()
-
-        return {
-            'total_functions': len(self.functions),
-            'total_calls': len(self.calls),
-            'total_control_flows': len(self.control_flows),
-            'max_call_depth': max_depth,
-            'circular_dependencies': circular_deps,
-            'orphan_functions': orphan_funcs[:10]  # Limit to first 10
-        }
-
-    def _detect_circular_dependencies(self) -> List[List[str]]:
-        """Detect circular call dependencies using DFS."""
-        # Build adjacency list
-        graph = {}
-        for call in self.calls:
-            if call['call_type'] == 'direct':
-                caller = call['caller_id']
-                callee = call['callee_id']
-                if caller not in graph:
-                    graph[caller] = []
-                graph[caller].append(callee)
-
-        visited = set()
-        rec_stack = set()
-        cycles = []
-
-        def dfs(node, path):
-            visited.add(node)
-            rec_stack.add(node)
-            path.append(node)
-
-            for neighbor in graph.get(node, []):
-                if neighbor not in visited:
-                    dfs(neighbor, path[:])
-                elif neighbor in rec_stack:
-                    # Found cycle
-                    cycle_start = path.index(neighbor)
-                    cycle = path[cycle_start:]
-                    if cycle not in cycles and len(cycle) > 1:
-                        cycles.append(cycle)
-
-            rec_stack.discard(node)
-
-        for node in graph:
-            if node not in visited:
-                dfs(node, [])
-
-        return cycles[:5]  # Limit to first 5 cycles
-
-    def _calculate_max_depth(self) -> int:
-        """Calculate maximum call depth from entry points."""
-        # Build adjacency list
-        graph = {}
-        for call in self.calls:
-            if call['call_type'] == 'direct':
-                caller = call['caller_id']
-                callee = call['callee_id']
-                if caller not in graph:
-                    graph[caller] = []
-                graph[caller].append(callee)
-
-        def dfs_depth(node, visited):
-            if node in visited or node not in graph:
-                return 0
-
-            visited.add(node)
-            max_child_depth = 0
-
-            for neighbor in graph[node]:
-                child_depth = dfs_depth(neighbor, visited.copy())
-                max_child_depth = max(max_child_depth, child_depth)
-
-            return 1 + max_child_depth
-
-        max_depth = 0
-        for func in self.functions:
-            depth = dfs_depth(func['id'], set())
-            max_depth = max(max_depth, depth)
-
-        return max_depth

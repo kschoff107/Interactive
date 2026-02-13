@@ -7,9 +7,14 @@ foreign keys, many-to-many relationships, and Meta options.
 """
 
 import ast
+import logging
 import os
 import re
 from typing import Dict, List, Optional, Tuple
+
+from ..base import BaseSchemaParser, find_source_files, SKIP_DIRS
+
+logger = logging.getLogger(__name__)
 
 
 # Map Django field types to simplified SQL-like types for display
@@ -460,7 +465,7 @@ class DjangoModelVisitor(ast.NodeVisitor):
         return name.endswith('Field')
 
 
-class DjangoParser:
+class DjangoParser(BaseSchemaParser):
     """Parse Django project to extract database schema from model definitions.
 
     Scans all Python files in a project directory for Django model classes
@@ -482,7 +487,10 @@ class DjangoParser:
         tables = []
         m2m_relations = []
 
-        model_files = self._find_python_files(project_path)
+        model_files = find_source_files(
+            project_path, ['.py'],
+            skip_dirs=SKIP_DIRS | {'migrations', 'static', 'templates', 'media'},
+        )
 
         for file_path in model_files:
             try:
@@ -500,10 +508,10 @@ class DjangoParser:
                     tables.append(model)
 
             except SyntaxError as e:
-                print(f"Syntax error in {file_path}: {e}")
+                logger.warning("Failed to parse %s: %s", file_path, e)
                 continue
             except Exception as e:
-                print(f"Error parsing {file_path}: {e}")
+                logger.warning("Failed to parse %s: %s", file_path, e)
                 continue
 
         if not tables:
@@ -540,31 +548,14 @@ class DjangoParser:
                 to_table = table_by_class[to_table.capitalize()]
 
             relationships.append({
-                'from': m2m['from_table'],
-                'to': to_table,
+                'from_table': m2m['from_table'],
+                'to_table': to_table,
+                'from_column': '',
+                'to_column': '',
                 'type': 'many-to-many',
-                'through': m2m.get('through'),
             })
 
-        return {
-            'tables': tables,
-            'relationships': relationships,
-        }
-
-    def _find_python_files(self, path: str) -> List[str]:
-        """Find all Python files in path, skipping common non-source dirs."""
-        skip_dirs = {
-            '__pycache__', '.git', '.venv', 'venv', 'env', 'node_modules',
-            '.pytest_cache', '.tox', 'dist', 'build', '.eggs',
-            'migrations', 'static', 'templates', 'media',
-        }
-        python_files = []
-        for root, dirs, files in os.walk(path):
-            dirs[:] = [d for d in dirs if d not in skip_dirs]
-            for file in files:
-                if file.endswith('.py'):
-                    python_files.append(os.path.join(root, file))
-        return python_files
+        return self.make_schema_result(tables, relationships)
 
     @staticmethod
     def _detect_relationships(tables: List[Dict]) -> List[Dict]:
@@ -574,8 +565,10 @@ class DjangoParser:
             for fk in table.get('foreign_keys', []):
                 rel_type = fk.get('relationship_type', 'many-to-one')
                 relationships.append({
-                    'from': table['name'],
-                    'to': fk['references_table'],
+                    'from_table': table['name'],
+                    'to_table': fk['references_table'],
+                    'from_column': fk.get('column', ''),
+                    'to_column': fk.get('references_column', ''),
                     'type': rel_type,
                 })
         return relationships

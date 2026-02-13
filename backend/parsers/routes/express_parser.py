@@ -11,6 +11,7 @@ Note: We strip only line comments (not string literals) because route paths
 and prefix strings must be preserved for extraction.
 """
 
+import logging
 import os
 import re
 from pathlib import Path
@@ -21,10 +22,10 @@ from ..base import (
     find_source_files,
     line_number_at,
     read_file_safe,
+    strip_comments_only,
 )
 
-# Strip line comments only, preserving string literals
-_RE_LINE_COMMENT = re.compile(r'//[^\n]*')
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Compiled regex patterns
@@ -85,7 +86,8 @@ class ExpressParser(BaseRoutesParser):
                 continue
             try:
                 self._parse_file(content, fpath)
-            except Exception:
+            except Exception as e:
+                logger.warning("Failed to parse %s: %s", fpath, e)
                 continue
 
         # Resolve router prefixes
@@ -102,7 +104,7 @@ class ExpressParser(BaseRoutesParser):
 
     def _parse_file(self, content: str, file_path: str):
         """Parse a single file for routes, routers, and mounts."""
-        stripped = _RE_LINE_COMMENT.sub('', content)
+        stripped = strip_comments_only(content, 'javascript')
         rel_path = self._relative_path(file_path)
         module_name = rel_path.replace(os.sep, '.').rsplit('.', 1)[0]
 

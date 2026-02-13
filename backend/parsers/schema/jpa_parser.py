@@ -5,6 +5,7 @@ Uses regex-based parsing with brace counting to extract @Entity classes,
 @Column definitions, relationship annotations, and table metadata.
 """
 
+import logging
 import os
 import re
 from typing import Dict, List, Optional, Tuple
@@ -17,6 +18,8 @@ from ..base import (
     read_file_safe,
     strip_comments,
 )
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Compiled regex patterns
@@ -174,7 +177,8 @@ class JPAParser(BaseSchemaParser):
                 file_tables, file_rels = self._parse_file(content, file_path)
                 tables.extend(file_tables)
                 relationships.extend(file_rels)
-            except Exception:
+            except Exception as e:
+                logger.warning("Failed to parse %s: %s", file_path, e)
                 continue
 
         # If no explicit relationships were found, derive from foreign keys

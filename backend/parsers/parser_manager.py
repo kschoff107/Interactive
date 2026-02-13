@@ -120,9 +120,6 @@ class ParserManager:
         if parser:
             return parser.parse(project_path)
 
-        if language == 'unknown' and framework == 'unknown':
-            return self._create_placeholder_schema(project_path, language, framework)
-
         raise UnsupportedFrameworkError(
             f"No database schema parser available for {language}/{framework}")
 
@@ -312,6 +309,10 @@ class ParserManager:
     @staticmethod
     def _has_database_files(path: str) -> bool:
         for root, dirs, files in os.walk(path):
+            dirs[:] = [d for d in dirs if d not in {
+                '.git', 'node_modules', '__pycache__', '.venv', 'venv',
+                'env', 'vendor', 'dist', 'build', '.eggs', '.tox',
+            }]
             for f in files:
                 if f.endswith(('.db', '.sqlite', '.sqlite3')):
                     return True
@@ -620,23 +621,3 @@ class ParserManager:
                 return 'dictionary'
         return 'abap'
 
-    # -----------------------------------------------------------------------
-    # Placeholder for unknown frameworks
-    # -----------------------------------------------------------------------
-
-    @staticmethod
-    def _create_placeholder_schema(project_path: str, language: str, framework: str) -> Dict:
-        return {
-            'tables': [{
-                'name': 'Example_Table',
-                'columns': [
-                    {'name': 'id', 'type': 'INTEGER', 'primary_key': True},
-                    {'name': 'name', 'type': 'TEXT', 'nullable': True},
-                ],
-                'foreign_keys': [],
-                'indexes': [],
-            }],
-            'relationships': [],
-            'note': f'Schema visualization is not yet implemented for {language}/{framework}. '
-                    'This is a placeholder.',
-        }

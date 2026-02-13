@@ -5,6 +5,7 @@ Uses regex-based parsing with brace counting to handle both Data Annotations
 style (attributes on properties) and Fluent API style (OnModelCreating).
 """
 
+import logging
 import re
 from typing import Dict, List, Optional, Tuple
 
@@ -12,6 +13,8 @@ from ..base import (
     BaseSchemaParser, read_file_safe,
     strip_comments, extract_block_body,
 )
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # C# type to SQL type mapping
@@ -240,7 +243,8 @@ class EntityFrameworkParser(BaseSchemaParser):
                 for name, props in navs.items():
                     nav_properties.setdefault(name, []).extend(props)
 
-            except Exception:
+            except Exception as e:
+                logger.warning("Failed to parse %s: %s", fpath, e)
                 continue
 
         # Phase 3: Apply Fluent API configs on top of data annotation results
@@ -269,7 +273,9 @@ class EntityFrameworkParser(BaseSchemaParser):
         seen_rels: set = set()
 
         def _add_rel(rel: Dict) -> None:
-            key = (rel.get('from', ''), rel.get('to', ''), rel.get('type', ''))
+            src = rel.get('from_table') or rel.get('from', '')
+            tgt = rel.get('to_table') or rel.get('to', '')
+            key = (src, tgt, rel.get('type', ''))
             if key not in seen_rels:
                 seen_rels.add(key)
                 all_relationships.append(rel)

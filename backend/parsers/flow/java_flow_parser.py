@@ -5,6 +5,7 @@ Uses regex-based parsing with brace counting to extract method declarations,
 method calls, control flow structures, and entry points from Java source files.
 """
 
+import logging
 import os
 import re
 from pathlib import Path
@@ -18,6 +19,8 @@ from ..base import (
     read_file_safe,
     strip_comments,
 )
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Compiled regex patterns
@@ -131,7 +134,8 @@ class JavaFlowParser(BaseFlowParser):
 
             try:
                 self._parse_file(content, file_path)
-            except Exception:
+            except Exception as e:
+                logger.warning("Failed to parse %s: %s", file_path, e)
                 continue
 
         # Resolve calls to definitions

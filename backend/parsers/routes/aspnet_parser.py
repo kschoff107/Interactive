@@ -5,6 +5,7 @@ Uses regex-based parsing with brace counting to handle attribute-routed
 ASP.NET Core Web API controllers ([ApiController], [HttpGet], etc.).
 """
 
+import logging
 import os
 import re
 from typing import Dict, List, Optional
@@ -13,6 +14,8 @@ from ..base import (
     BaseRoutesParser, find_source_files, read_file_safe,
     strip_comments, extract_block_body, line_number_at,
 )
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Compiled regex patterns — Controller detection
@@ -149,7 +152,8 @@ class ASPNetParser(BaseRoutesParser):
 
             try:
                 self._parse_file(content, raw_content, fpath)
-            except Exception:
+            except Exception as e:
+                logger.warning("Failed to parse %s: %s", fpath, e)
                 continue
 
         # Update blueprint route counts

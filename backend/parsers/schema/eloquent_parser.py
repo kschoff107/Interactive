@@ -13,25 +13,8 @@ from typing import Dict, List, Optional
 from ..base import (
     BaseSchemaParser, find_source_files, read_file_safe,
     strip_comments, extract_block_body, line_number_at,
+    strip_comments_only,
 )
-
-# Custom comment-only stripping for PHP that preserves string literals.
-# The standard strip_comments('php') also removes strings, which destroys
-# table names, column names, and other values we need to parse.
-_PHP_COMMENT_ONLY_RE = re.compile(
-    r'//[^\n]*'             # single-line //
-    r'|#[^\n]*'             # single-line #
-    r'|/\*.*?\*/',          # multi-line /* */
-    re.DOTALL,
-)
-
-
-def _strip_php_comments_only(content: str) -> str:
-    """Strip PHP comments while preserving string literals."""
-    return _PHP_COMMENT_ONLY_RE.sub(
-        lambda m: re.sub(r'[^\n]', ' ', m.group(0)),
-        content,
-    )
 
 # ---------------------------------------------------------------------------
 # Compiled regex patterns — Model parsing
@@ -270,7 +253,7 @@ class EloquentParser(BaseSchemaParser):
 
     def _parse_model(self, content: str, file_path: str) -> Optional[Dict]:
         """Parse a single Eloquent model file."""
-        stripped = _strip_php_comments_only(content)
+        stripped = strip_comments_only(content, 'php')
 
         class_match = _MODEL_CLASS_RE.search(stripped)
         if not class_match:
@@ -345,7 +328,7 @@ class EloquentParser(BaseSchemaParser):
 
     def _parse_migration(self, content: str, file_path: str) -> List[Dict]:
         """Parse a Laravel migration file."""
-        stripped = _strip_php_comments_only(content)
+        stripped = strip_comments_only(content, 'php')
         tables: List[Dict] = []
 
         for match in _SCHEMA_CREATE_RE.finditer(stripped):

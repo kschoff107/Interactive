@@ -5,10 +5,13 @@ Provides standardized interfaces, file discovery, comment stripping,
 and result formatting used across schema, flow, and routes parsers.
 """
 
+import logging
 import os
 import re
 from pathlib import Path
 from typing import Dict, List, Optional, Set, Tuple
+
+logger = logging.getLogger(__name__)
 
 
 SKIP_DIRS = {
@@ -55,7 +58,11 @@ def read_file_safe(file_path: str, encoding: str = 'utf-8') -> Optional[str]:
                 return f.read()
         except UnicodeDecodeError:
             continue
-        except Exception:
+        except (PermissionError, OSError) as e:
+            logger.warning("Cannot read %s: %s", file_path, e)
+            return None
+        except Exception as e:
+            logger.error("Unexpected error reading %s: %s", file_path, e, exc_info=True)
             return None
     return None
 
@@ -146,6 +153,42 @@ def strip_comments(content: str, language: str) -> str:
     return pattern.sub(_replace_keeping_newlines, content)
 
 
+# Characters that start a string literal (vs. a comment)
+_STRING_STARTERS = frozenset({"'", '"', '`'})
+
+
+def _replace_comments_keep_strings(match):
+    """Replace comments with whitespace but preserve string literals intact."""
+    text = match.group(0)
+    if text[0] in _STRING_STARTERS:
+        return text  # string literal — keep unchanged
+    return re.sub(r'[^\n]', ' ', text)  # comment — blank out
+
+
+def strip_comments_only(content: str, language: str) -> str:
+    """Strip comments but preserve string literals.
+
+    Uses the same regex patterns as strip_comments() but only replaces
+    comment matches. String literal matches are returned unchanged.
+    Character positions are preserved (comments replaced with whitespace).
+
+    Use this when regex patterns need to capture values from string literals
+    but must not match inside comments.
+
+    Args:
+        content: Raw source code.
+        language: Language key (e.g. 'java', 'csharp', 'javascript', 'ruby').
+
+    Returns:
+        Source with comments replaced by whitespace, strings intact.
+    """
+    pattern_key = _LANG_TO_PATTERN.get(language, 'c_family')
+    pattern = _STRIP_PATTERNS.get(pattern_key)
+    if not pattern:
+        return content
+    return pattern.sub(_replace_comments_keep_strings, content)
+
+
 # ---------------------------------------------------------------------------
 # Brace-counting utility for class/block body extraction
 # ---------------------------------------------------------------------------
@@ -208,10 +251,26 @@ class BaseSchemaParser:
     def make_schema_result(self, tables: List[Dict],
                            relationships: List[Dict] = None) -> Dict:
         """Build a standardized schema result dict."""
+        raw = (relationships if relationships is not None
+               else self._detect_relationships(tables))
         return {
             'tables': tables,
-            'relationships': relationships if relationships is not None
-                             else self._detect_relationships(tables),
+            'relationships': [self._normalize_relationship(r) for r in raw],
+        }
+
+    @staticmethod
+    def _normalize_relationship(rel: Dict) -> Dict:
+        """Normalize relationship dict to the canonical frontend format.
+
+        Canonical keys: from_table, to_table, from_column, to_column, type.
+        Accepts both {'from'/'to'} and {'from_table'/'to_table'} inputs.
+        """
+        return {
+            'from_table': rel.get('from_table') or rel.get('from', ''),
+            'to_table': rel.get('to_table') or rel.get('to', ''),
+            'from_column': rel.get('from_column', ''),
+            'to_column': rel.get('to_column', ''),
+            'type': rel.get('type', 'many-to-one'),
         }
 
     @staticmethod
@@ -221,8 +280,10 @@ class BaseSchemaParser:
         for table in tables:
             for fk in table.get('foreign_keys', []):
                 relationships.append({
-                    'from': table['name'],
-                    'to': fk['references_table'],
+                    'from_table': table['name'],
+                    'to_table': fk['references_table'],
+                    'from_column': fk.get('column', ''),
+                    'to_column': fk.get('references_column', ''),
                     'type': 'many-to-one',
                 })
         return relationships

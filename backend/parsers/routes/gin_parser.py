@@ -12,25 +12,8 @@ from typing import Dict, List, Optional, Tuple
 
 from ..base import (
     BaseRoutesParser, find_source_files, read_file_safe,
-    line_number_at,
+    line_number_at, strip_comments_only,
 )
-
-# Custom comment-only stripping for Go that preserves string literals.
-# Gin/Echo route definitions use strings for paths and handler references.
-# Standard strip_comments('go') removes these strings via c_family patterns.
-_GO_COMMENT_ONLY_RE = re.compile(
-    r'//[^\n]*'              # single-line comments
-    r'|/\*.*?\*/',           # multi-line comments
-    re.DOTALL,
-)
-
-
-def _strip_go_comments_only(content: str) -> str:
-    """Strip Go comments while preserving string literals."""
-    return _GO_COMMENT_ONLY_RE.sub(
-        lambda m: re.sub(r'[^\n]', ' ', m.group(0)),
-        content,
-    )
 
 # ---------------------------------------------------------------------------
 # Compiled regex patterns
@@ -118,7 +101,7 @@ class GinParser(BaseRoutesParser):
             content = read_file_safe(fpath)
             if not content:
                 continue
-            stripped = _strip_go_comments_only(content)
+            stripped = strip_comments_only(content, 'go')
 
             # Detect router initializations
             for match in _GIN_INIT_RE.finditer(stripped):
@@ -181,7 +164,7 @@ class GinParser(BaseRoutesParser):
             content = read_file_safe(fpath)
             if not content:
                 continue
-            stripped = _strip_go_comments_only(content)
+            stripped = strip_comments_only(content, 'go')
             self._parse_routes(
                 stripped, content, fpath,
                 router_vars, group_vars, group_prefixes, middleware_vars,

@@ -6,6 +6,7 @@ Uses regex-based parsing on comment-stripped, case-normalized source.
 ABAP statements end with periods (.) and keywords are case-insensitive.
 """
 
+import logging
 import os
 import re
 from typing import Dict, List, Optional, Tuple
@@ -17,6 +18,8 @@ from ..base import (
     read_file_safe,
     strip_comments,
 )
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # ABAP type -> SQL type mapping
@@ -183,14 +186,21 @@ class ABAPDictParser(BaseSchemaParser):
                 all_tables.extend(tables)
                 all_relationships.extend(rels)
                 table_type_refs.update(tt_refs)
-            except Exception:
+            except Exception as e:
+                logger.warning("Failed to parse %s: %s", fpath, e)
                 continue
 
         # Derive implicit relationships from foreign key detection
         implicit = self._detect_relationships(all_tables)
-        existing = {(r['from'], r['to']) for r in all_relationships}
+        existing = {
+            (r.get('from_table') or r.get('from', ''),
+             r.get('to_table') or r.get('to', ''))
+            for r in all_relationships
+        }
         for r in implicit:
-            if (r['from'], r['to']) not in existing:
+            key = (r.get('from_table') or r.get('from', ''),
+                   r.get('to_table') or r.get('to', ''))
+            if key not in existing:
                 all_relationships.append(r)
 
         return self.make_schema_result(all_tables, all_relationships)

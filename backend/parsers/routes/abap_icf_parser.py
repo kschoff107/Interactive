@@ -7,6 +7,7 @@ Uses regex-based parsing on comment-stripped, case-normalized source.
 ABAP statements end with periods (.) and keywords are case-insensitive.
 """
 
+import logging
 import os
 import re
 from pathlib import Path
@@ -19,6 +20,8 @@ from ..base import (
     read_file_safe,
     strip_comments,
 )
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # OData DPC operation -> HTTP method mapping
@@ -207,7 +210,8 @@ class ABAPICFParser(BaseRoutesParser):
                 continue
             try:
                 self._parse_file(content, fpath)
-            except Exception:
+            except Exception as e:
+                logger.warning("Failed to parse %s: %s", fpath, e)
                 continue
 
         return self.make_routes_result()

@@ -7,6 +7,7 @@ ABAP statements end with periods (.) and keywords are case-insensitive.
 Blocks are delimited by keyword pairs (IF/ENDIF, LOOP/ENDLOOP, etc.).
 """
 
+import logging
 import os
 import re
 from pathlib import Path
@@ -19,6 +20,8 @@ from ..base import (
     read_file_safe,
     strip_comments,
 )
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Compiled regex patterns (all match against UPPERCASED source)
@@ -174,7 +177,8 @@ class ABAPFlowParser(BaseFlowParser):
                 continue
             try:
                 self._parse_file(content, fpath)
-            except Exception:
+            except Exception as e:
+                logger.warning("Failed to parse %s: %s", fpath, e)
                 continue
 
         self._resolve_calls()

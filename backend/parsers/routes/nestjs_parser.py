@@ -4,11 +4,11 @@ NestJS Routes Parser - Extract API route definitions from NestJS controllers.
 Uses regex + brace counting on source to parse NestJS decorator patterns
 (@Controller, @Get, @Post, @UseGuards, etc.).
 
-Note: We strip only line comments (not string literals) because decorator
-arguments like @Controller('users') and @Get(':id') contain string values
-that must be preserved for route path extraction.
+Dual-content strategy: strip_comments_only() preserves strings for regex
+matching; strip_comments() removes everything for safe brace counting.
 """
 
+import logging
 import os
 import re
 from pathlib import Path
@@ -20,10 +20,11 @@ from ..base import (
     find_source_files,
     line_number_at,
     read_file_safe,
+    strip_comments,
+    strip_comments_only,
 )
 
-# Strip line comments only, preserving string literals
-_RE_LINE_COMMENT = re.compile(r'//[^\n]*')
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Compiled regex patterns
@@ -89,7 +90,8 @@ class NestJSParser(BaseRoutesParser):
                 continue
             try:
                 self._parse_file(content, fpath)
-            except Exception:
+            except Exception as e:
+                logger.warning("Failed to parse %s: %s", fpath, e)
                 continue
 
         # Update blueprint route counts
@@ -102,27 +104,35 @@ class NestJSParser(BaseRoutesParser):
     # ------------------------------------------------------------------
 
     def _parse_file(self, content: str, file_path: str):
-        """Parse a single TypeScript file for NestJS controllers."""
-        stripped = _RE_LINE_COMMENT.sub('', content)
+        """Parse a single TypeScript file for NestJS controllers.
+
+        Dual-content strategy:
+        - comment_clean: comments stripped, strings preserved — for regex matching
+        - fully_stripped: comments AND strings stripped — for brace counting
+        Both preserve character positions, so offsets are interchangeable.
+        """
+        comment_clean = strip_comments_only(content, 'javascript')
+        fully_stripped = strip_comments(content, 'javascript')
         rel_path = self._relative_path(file_path)
         module_name = rel_path.replace(os.sep, '.').rsplit('.', 1)[0]
 
-        for m in _RE_CONTROLLER.finditer(stripped):
+        for m in _RE_CONTROLLER.finditer(comment_clean):
             controller_prefix = m.group(1) or ''
             controller_name = m.group(2)
 
             # Check for class-level @UseGuards
             # Only look in the region between the previous closing '}' and @Controller
             scan_start = max(0, m.start() - 500)
-            prev_brace = stripped.rfind('}', scan_start, m.start())
+            prev_brace = comment_clean.rfind('}', scan_start, m.start())
             guard_region_start = prev_brace + 1 if prev_brace >= scan_start else scan_start
-            pre_controller = stripped[guard_region_start:m.start()]
+            pre_controller = comment_clean[guard_region_start:m.start()]
             class_guards = self._extract_guards(pre_controller)
 
-            # Extract controller body
-            body, body_start, body_end = extract_block_body(stripped, m.start())
+            # Extract controller body (brace counting on fully stripped content)
+            _, body_start, body_end = extract_block_body(fully_stripped, m.start())
             if body_start < 0:
                 continue
+            body = comment_clean[body_start:body_end]
 
             line_num = line_number_at(content, m.start())
             bp_id = f"controller_{module_name}_{controller_name}_{line_num}"
@@ -139,7 +149,7 @@ class NestJSParser(BaseRoutesParser):
 
             # Parse methods inside controller body
             self._parse_controller_body(
-                body, body_start, content, stripped,
+                body, body_start, content, comment_clean,
                 bp_id, controller_prefix, controller_name,
                 class_guards, file_path, module_name,
             )
@@ -257,7 +267,7 @@ class NestJSParser(BaseRoutesParser):
                 },
             })
 
-            pos = m.end() + sig_m.end()
+            pos = sig_abs_end
 
     @staticmethod
     def _extract_guards(text: str) -> List[str]:

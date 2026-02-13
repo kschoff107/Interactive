@@ -1,42 +1,36 @@
 import ast
+import logging
 import os
 from typing import Dict, List
 
-class SQLAlchemyParser:
-    """Parser for SQLAlchemy models"""
+from ..base import BaseSchemaParser, find_source_files, read_file_safe
+
+logger = logging.getLogger(__name__)
+
+
+class SQLAlchemyParser(BaseSchemaParser):
+    """Parser for SQLAlchemy models."""
+
+    FILE_EXTENSIONS = ['.py']
 
     def parse(self, project_path: str) -> Dict:
-        """Parse SQLAlchemy models and return standardized schema"""
+        """Parse SQLAlchemy models and return standardized schema."""
         tables = []
 
-        # Find all Python files
-        model_files = self._find_python_files(project_path)
+        model_files = self.find_files(project_path)
 
         for file_path in model_files:
+            content = read_file_safe(file_path)
+            if not content:
+                continue
             try:
-                with open(file_path, 'r', encoding='utf-8') as f:
-                    tree = ast.parse(f.read())
-                    tables.extend(self._extract_tables_from_ast(tree))
+                tree = ast.parse(content)
+                tables.extend(self._extract_tables_from_ast(tree))
             except Exception as e:
-                print(f"Error parsing {file_path}: {e}")
+                logger.warning("Failed to parse %s: %s", file_path, e)
                 continue
 
-        # Detect relationships
-        relationships = self._detect_relationships(tables)
-
-        return {
-            'tables': tables,
-            'relationships': relationships
-        }
-
-    def _find_python_files(self, path: str) -> List[str]:
-        """Find all Python files in path"""
-        python_files = []
-        for root, dirs, files in os.walk(path):
-            for file in files:
-                if file.endswith('.py'):
-                    python_files.append(os.path.join(root, file))
-        return python_files
+        return self.make_schema_result(tables)
 
     def _extract_tables_from_ast(self, tree: ast.AST) -> List[Dict]:
         """Extract table definitions from AST"""
@@ -67,7 +61,11 @@ class SQLAlchemyParser:
         return tables
 
     def _extract_columns(self, class_node: ast.ClassDef) -> List[Dict]:
-        """Extract columns from class definition"""
+        """Extract columns from class definition.
+
+        Handles both plain SQLAlchemy (Column(...)) and Flask-SQLAlchemy
+        (db.Column(...)) patterns.
+        """
         columns = []
 
         for item in class_node.body:
@@ -78,45 +76,50 @@ class SQLAlchemyParser:
                         if col_name.startswith('_'):
                             continue
 
-                        # Parse Column() call
-                        if isinstance(item.value, ast.Call):
-                            if isinstance(item.value.func, ast.Name) and item.value.func.id == 'Column':
-                                column_info = self._parse_column_call(col_name, item.value)
-                                columns.append(column_info)
+                        if isinstance(item.value, ast.Call) and self._is_column_call(item.value):
+                            column_info = self._parse_column_call(col_name, item.value)
+                            columns.append(column_info)
 
         return columns
 
     def _parse_column_call(self, name: str, call: ast.Call) -> Dict:
-        """Parse a Column() call"""
+        """Parse a Column() call."""
         column = {
             'name': name,
             'type': 'String',
             'nullable': True,
             'primary_key': False,
-            'unique': False
+            'unique': False,
         }
 
-        # Get type from first arg
+        # Get type from first arg — handles both String and db.String
         if call.args:
             first_arg = call.args[0]
-            if isinstance(first_arg, ast.Name):
-                column['type'] = first_arg.id
-            elif isinstance(first_arg, ast.Call) and isinstance(first_arg.func, ast.Name):
-                column['type'] = first_arg.func.id
+            col_type = self._extract_name(first_arg)
+            if col_type:
+                column['type'] = col_type
+            elif isinstance(first_arg, ast.Call):
+                # String(255), db.String(255)
+                inner_name = self._extract_name(first_arg.func)
+                if inner_name:
+                    column['type'] = inner_name
 
         # Parse keyword arguments
         for keyword in call.keywords:
             if keyword.arg == 'primary_key':
-                column['primary_key'] = isinstance(keyword.value, ast.Constant) and keyword.value.value == True
+                column['primary_key'] = isinstance(keyword.value, ast.Constant) and keyword.value.value is True
             elif keyword.arg == 'nullable':
-                column['nullable'] = not (isinstance(keyword.value, ast.Constant) and keyword.value.value == False)
+                column['nullable'] = not (isinstance(keyword.value, ast.Constant) and keyword.value.value is False)
             elif keyword.arg == 'unique':
-                column['unique'] = isinstance(keyword.value, ast.Constant) and keyword.value.value == True
+                column['unique'] = isinstance(keyword.value, ast.Constant) and keyword.value.value is True
 
         return column
 
     def _extract_foreign_keys(self, class_node: ast.ClassDef) -> List[Dict]:
-        """Extract foreign keys from class definition"""
+        """Extract foreign keys from class definition.
+
+        Handles both Column(ForeignKey(...)) and db.Column(db.ForeignKey(...)).
+        """
         foreign_keys = []
 
         for item in class_node.body:
@@ -125,34 +128,46 @@ class SQLAlchemyParser:
                     if isinstance(target, ast.Name):
                         col_name = target.id
 
-                        # Look for Column with ForeignKey
-                        if isinstance(item.value, ast.Call) and isinstance(item.value.func, ast.Name) and item.value.func.id == 'Column':
+                        if isinstance(item.value, ast.Call) and self._is_column_call(item.value):
                             for arg in item.value.args:
-                                if isinstance(arg, ast.Call) and isinstance(arg.func, ast.Name) and arg.func.id == 'ForeignKey':
-                                    if arg.args:
-                                        fk_target = arg.args[0]
-                                        if isinstance(fk_target, ast.Constant):
-                                            # Parse 'table.column' format
-                                            parts = fk_target.value.split('.')
-                                            if len(parts) == 2:
-                                                foreign_keys.append({
-                                                    'column': col_name,
-                                                    'references_table': parts[0],
-                                                    'references_column': parts[1]
-                                                })
+                                if isinstance(arg, ast.Call) and self._is_fk_call(arg):
+                                    if arg.args and isinstance(arg.args[0], ast.Constant):
+                                        parts = str(arg.args[0].value).split('.')
+                                        if len(parts) == 2:
+                                            foreign_keys.append({
+                                                'column': col_name,
+                                                'references_table': parts[0],
+                                                'references_column': parts[1],
+                                            })
 
         return foreign_keys
 
-    def _detect_relationships(self, tables: List[Dict]) -> List[Dict]:
-        """Detect relationships between tables based on foreign keys"""
-        relationships = []
+    @staticmethod
+    def _is_column_call(node: ast.Call) -> bool:
+        """Check if an AST Call node is Column() or db.Column()."""
+        func = node.func
+        if isinstance(func, ast.Name) and func.id == 'Column':
+            return True
+        if isinstance(func, ast.Attribute) and func.attr == 'Column':
+            return True
+        return False
 
-        for table in tables:
-            for fk in table['foreign_keys']:
-                relationships.append({
-                    'from': table['name'],
-                    'to': fk['references_table'],
-                    'type': 'many-to-one'
-                })
+    @staticmethod
+    def _is_fk_call(node: ast.Call) -> bool:
+        """Check if an AST Call node is ForeignKey() or db.ForeignKey()."""
+        func = node.func
+        if isinstance(func, ast.Name) and func.id == 'ForeignKey':
+            return True
+        if isinstance(func, ast.Attribute) and func.attr == 'ForeignKey':
+            return True
+        return False
 
-        return relationships
+    @staticmethod
+    def _extract_name(node: ast.AST) -> str:
+        """Extract a simple name from ast.Name or ast.Attribute (e.g. db.String → 'String')."""
+        if isinstance(node, ast.Name):
+            return node.id
+        if isinstance(node, ast.Attribute):
+            return node.attr
+        return ''
+

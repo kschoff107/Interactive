@@ -12,25 +12,8 @@ from typing import Dict, List, Optional, Tuple
 
 from ..base import (
     BaseSchemaParser, find_source_files, read_file_safe,
-    line_number_at,
+    line_number_at, strip_comments_only,
 )
-
-# Custom comment stripping for Go that preserves backtick struct tags.
-# The standard strip_comments('go') uses c_family which strips backtick
-# strings, but GORM relies on backtick-delimited struct tags.
-_GO_COMMENT_RE = re.compile(
-    r'//[^\n]*'              # single-line comments
-    r'|/\*.*?\*/',           # multi-line comments
-    re.DOTALL,
-)
-
-
-def _strip_go_comments(content: str) -> str:
-    """Strip Go comments while preserving backtick struct tags."""
-    return _GO_COMMENT_RE.sub(
-        lambda m: re.sub(r'[^\n]', ' ', m.group(0)),
-        content,
-    )
 
 # ---------------------------------------------------------------------------
 # Compiled regex patterns
@@ -190,7 +173,7 @@ class GORMParser(BaseSchemaParser):
 
     def _parse_file(self, content: str, file_path: str) -> Tuple[List[Dict], List[Dict]]:
         """Parse a single Go file for GORM structs."""
-        stripped = _strip_go_comments(content)
+        stripped = strip_comments_only(content, 'go')
         tables: List[Dict] = []
         relationships: List[Dict] = []
 

@@ -9,6 +9,7 @@ match structural patterns on stripped content but extract string values
 (table names, column types) from the original content at the same positions.
 """
 
+import logging
 import os
 import re
 from typing import Dict, List, Optional, Tuple
@@ -20,7 +21,10 @@ from ..base import (
     line_number_at,
     read_file_safe,
     strip_comments,
+    strip_comments_only,
 )
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Compiled regex patterns (applied to ORIGINAL content, not stripped)
@@ -117,14 +121,21 @@ class TypeORMParser(BaseSchemaParser):
                 tables, rels = self._parse_file(content, fpath)
                 all_tables.extend(tables)
                 all_relationships.extend(rels)
-            except Exception:
+            except Exception as e:
+                logger.warning("Failed to parse %s: %s", fpath, e)
                 continue
 
         # Also derive relationships from foreign keys
         implicit = self._detect_relationships(all_tables)
-        existing = {(r['from'], r['to']) for r in all_relationships}
+        existing = {
+            (r.get('from_table') or r.get('from', ''),
+             r.get('to_table') or r.get('to', ''))
+            for r in all_relationships
+        }
         for r in implicit:
-            if (r['from'], r['to']) not in existing:
+            key = (r.get('from_table') or r.get('from', ''),
+                   r.get('to_table') or r.get('to', ''))
+            if key not in existing:
                 all_relationships.append(r)
 
         return self.make_schema_result(all_tables, all_relationships)
@@ -138,26 +149,28 @@ class TypeORMParser(BaseSchemaParser):
     ) -> Tuple[List[Dict], List[Dict]]:
         """Parse a single TypeScript/JavaScript file for TypeORM entities.
 
-        We run regex on the ORIGINAL content (not stripped) because
-        strip_comments replaces string literals with whitespace, making it
-        impossible to extract table names, column types, and join column names.
-        Comment stripping is still used indirectly: we verify entity matches
-        are not inside comments by checking if @Entity appears at a non-comment
-        position.
+        Dual-content strategy:
+        - comment_clean: comments stripped, strings preserved — for regex matching
+        - fully_stripped: comments AND strings stripped — for brace counting
+        Both preserve character positions, so offsets are interchangeable.
         """
+        comment_clean = strip_comments_only(content, 'javascript')
+        fully_stripped = strip_comments(content, 'javascript')
+
         tables: List[Dict] = []
         relationships: List[Dict] = []
 
-        # Use original content for regex matching (string literals preserved)
-        for m in _RE_ENTITY.finditer(content):
+        for m in _RE_ENTITY.finditer(comment_clean):
             table_name_arg = m.group(1)
             class_name = m.group(2)
             table_name = table_name_arg or self._to_snake_case(class_name)
 
-            # Extract class body using brace counting on original content
-            body, body_start, body_end = extract_block_body(content, m.start())
+            # Brace counting on fully stripped content (no {/} in strings)
+            _, body_start, body_end = extract_block_body(fully_stripped, m.start())
             if body_start < 0:
                 continue
+            # Extract body from comment_clean for value parsing
+            body = comment_clean[body_start:body_end]
 
             columns, fks, rels = self._parse_entity_body(body, class_name)
             tables.append({

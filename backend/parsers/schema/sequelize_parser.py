@@ -12,6 +12,7 @@ strip_comments replaces string literals with whitespace, preventing
 extraction of model names, table names, and reference targets.
 """
 
+import logging
 import os
 import re
 from typing import Dict, List, Optional, Tuple
@@ -23,7 +24,10 @@ from ..base import (
     line_number_at,
     read_file_safe,
     strip_comments,
+    strip_comments_only,
 )
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Compiled regex patterns
@@ -84,8 +88,6 @@ _RE_BELONGS_TO_MANY = re.compile(r"""(\w+)\.belongsToMany\s*\(\s*(\w+)""")
 # foreignKey inside association options
 _RE_FOREIGN_KEY = re.compile(r"""foreignKey\s*:\s*['"](\w+)['"]""")
 
-# Single-line comment for manual stripping
-_RE_LINE_COMMENT = re.compile(r'//[^\n]*')
 
 # Sequelize type -> SQL type mapping
 _SEQ_TYPE_MAP = {
@@ -128,13 +130,20 @@ class SequelizeParser(BaseSchemaParser):
                 tables, rels = self._parse_file(content, fpath)
                 all_tables.extend(tables)
                 all_relationships.extend(rels)
-            except Exception:
+            except Exception as e:
+                logger.warning("Failed to parse %s: %s", fpath, e)
                 continue
 
         implicit = self._detect_relationships(all_tables)
-        existing = {(r['from'], r['to']) for r in all_relationships}
+        existing = {
+            (r.get('from_table') or r.get('from', ''),
+             r.get('to_table') or r.get('to', ''))
+            for r in all_relationships
+        }
         for r in implicit:
-            if (r['from'], r['to']) not in existing:
+            key = (r.get('from_table') or r.get('from', ''),
+                   r.get('to_table') or r.get('to', ''))
+            if key not in existing:
                 all_relationships.append(r)
 
         return self.make_schema_result(all_tables, all_relationships)
@@ -148,30 +157,32 @@ class SequelizeParser(BaseSchemaParser):
     ) -> Tuple[List[Dict], List[Dict]]:
         """Parse a single JS/TS file for Sequelize models and associations.
 
-        Uses original content (not comment-stripped) so that string literals
-        like model names, table names, and reference targets are preserved.
-        Line comments are stripped manually to avoid matching inside comments.
+        Dual-content strategy:
+        - comment_clean: comments stripped, strings preserved — for regex matching
+        - fully_stripped: comments AND strings stripped — for brace counting
+        Both preserve character positions, so offsets are interchangeable.
         """
-        # Strip only line comments, preserving string literals
-        cleaned = _RE_LINE_COMMENT.sub('', content)
+        comment_clean = strip_comments_only(content, 'javascript')
+        fully_stripped = strip_comments(content, 'javascript')
+
         tables: List[Dict] = []
         relationships: List[Dict] = []
 
         # Pattern 1: sequelize.define(...)
-        for m in _RE_DEFINE.finditer(cleaned):
+        for m in _RE_DEFINE.finditer(comment_clean):
             var_name = m.group(1)
             model_name = m.group(2)
-            # Find the fields object starting after the model name arg
-            # We need to find the first { after the comma
-            body, bs, be = extract_block_body(cleaned, m.end() - 1)
+            # Brace counting on fully stripped (no {/} in strings)
+            _, bs, be = extract_block_body(fully_stripped, m.end() - 1)
             if bs < 0:
                 continue
-            columns, fks = self._parse_fields(body, cleaned)
+            body = comment_clean[bs:be]
+            columns, fks = self._parse_fields(body, comment_clean)
             # Try to find options block (second { } after first)
             table_name = self._to_plural_snake(model_name)
-            rest_after_fields = cleaned[be + 1:]
-            opts_body, obs, obe = extract_block_body(rest_after_fields, 0)
+            _, obs, obe = extract_block_body(fully_stripped[be + 1:], 0)
             if obs >= 0:
+                opts_body = comment_clean[be + 1 + obs:be + 1 + obe]
                 tn_m = _RE_TABLE_NAME.search(opts_body)
                 if tn_m:
                     table_name = tn_m.group(1)
@@ -186,17 +197,18 @@ class SequelizeParser(BaseSchemaParser):
             })
 
         # Pattern 2: Model.init(...)
-        for m in _RE_MODEL_INIT.finditer(cleaned):
+        for m in _RE_MODEL_INIT.finditer(comment_clean):
             model_name = m.group(1)
-            body, bs, be = extract_block_body(cleaned, m.end() - 1)
+            _, bs, be = extract_block_body(fully_stripped, m.end() - 1)
             if bs < 0:
                 continue
-            columns, fks = self._parse_fields(body, cleaned)
+            body = comment_clean[bs:be]
+            columns, fks = self._parse_fields(body, comment_clean)
             table_name = self._to_plural_snake(model_name)
             # Try to find options in second arg
-            rest_after_fields = cleaned[be + 1:]
-            opts_body, obs, obe = extract_block_body(rest_after_fields, 0)
+            _, obs, obe = extract_block_body(fully_stripped[be + 1:], 0)
             if obs >= 0:
+                opts_body = comment_clean[be + 1 + obs:be + 1 + obe]
                 tn_m = _RE_TABLE_NAME.search(opts_body)
                 if tn_m:
                     table_name = tn_m.group(1)
@@ -217,7 +229,7 @@ class SequelizeParser(BaseSchemaParser):
             (_RE_HAS_ONE, 'one-to-one'),
             (_RE_BELONGS_TO_MANY, 'many-to-many'),
         ]:
-            for m in pattern.finditer(cleaned):
+            for m in pattern.finditer(comment_clean):
                 source = m.group(1)
                 target = m.group(2)
                 relationships.append({

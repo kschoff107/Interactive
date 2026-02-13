@@ -5,6 +5,7 @@ Uses regex-based parsing with brace counting to extract @RestController classes,
 @RequestMapping prefixes, and method-level mapping annotations.
 """
 
+import logging
 import os
 import re
 from pathlib import Path
@@ -18,6 +19,8 @@ from ..base import (
     read_file_safe,
     strip_comments,
 )
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Compiled regex patterns
@@ -181,7 +184,8 @@ class SpringParser(BaseRoutesParser):
 
             try:
                 self._parse_file(content, file_path)
-            except Exception:
+            except Exception as e:
+                logger.warning("Failed to parse %s: %s", file_path, e)
                 continue
 
         # Update blueprint route counts

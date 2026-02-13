@@ -5,11 +5,14 @@ Uses line-by-line DSL parsing (not regex on full content) to handle
 Prisma's block-structured format: model, enum, datasource, generator blocks.
 """
 
+import logging
 import os
 import re
 from typing import Dict, List, Optional, Tuple
 
 from ..base import BaseSchemaParser, find_source_files, read_file_safe
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Compiled regex patterns
@@ -71,15 +74,22 @@ class PrismaParser(BaseSchemaParser):
                 all_tables.extend(tables)
                 all_enums.extend(enums)
                 all_relationships.extend(rels)
-            except Exception:
+            except Exception as e:
+                logger.warning("Failed to parse %s: %s", fpath, e)
                 continue
 
         # Also derive implicit relationships from foreign key columns
         implicit_rels = self._detect_relationships(all_tables)
-        # Merge, avoiding duplicates
-        existing = {(r['from'], r['to']) for r in all_relationships}
+        # Merge, avoiding duplicates (handle both from/to and from_table/to_table keys)
+        existing = {
+            (r.get('from_table') or r.get('from', ''),
+             r.get('to_table') or r.get('to', ''))
+            for r in all_relationships
+        }
         for r in implicit_rels:
-            if (r['from'], r['to']) not in existing:
+            key = (r.get('from_table') or r.get('from', ''),
+                   r.get('to_table') or r.get('to', ''))
+            if key not in existing:
                 all_relationships.append(r)
 
         result = self.make_schema_result(all_tables, all_relationships)

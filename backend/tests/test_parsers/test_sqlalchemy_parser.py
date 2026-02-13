@@ -37,8 +37,8 @@ def test_parse_simple_sqlalchemy_models():
     assert fk['references_table'] == 'users'
     assert fk['references_column'] == 'id'
 
-    # Check relationships
+    # Check relationships (canonical format: from_table/to_table)
     assert len(result['relationships']) >= 1
-    rel = next(r for r in result['relationships'] if r['from'] == 'posts')
-    assert rel['to'] == 'users'
+    rel = next(r for r in result['relationships'] if r['from_table'] == 'posts')
+    assert rel['to_table'] == 'users'
     assert rel['type'] == 'many-to-one'

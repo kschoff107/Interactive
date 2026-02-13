@@ -5,10 +5,15 @@ Uses Python's AST module for static code analysis without executing code.
 """
 
 import ast
+import logging
 import os
 import re
 from pathlib import Path
 from typing import Dict, List, Optional, Set
+
+from ..base import BaseRoutesParser, find_source_files
+
+logger = logging.getLogger(__name__)
 
 
 # Known auth decorator names
@@ -214,81 +219,29 @@ class RouteVisitor(ast.NodeVisitor):
         return None
 
 
-class FlaskRoutesParser:
+class FlaskRoutesParser(BaseRoutesParser):
     """Parse Flask application to extract API route definitions."""
 
-    def __init__(self, project_path: str, options: Optional[Dict] = None):
-        """
-        Initialize parser with project directory.
+    FILE_EXTENSIONS = ['.py']
 
-        Args:
-            project_path: Root directory of Flask project
-            options: Configuration options
-        """
-        self.project_path = Path(project_path)
-        self.options = options or {}
-        self.blueprints = []
-        self.routes = []
+    def __init__(self, project_path: str, options: Optional[Dict] = None):
+        super().__init__(project_path, options)
         self.blueprint_prefixes = {}  # blueprint_id -> url_prefix from register_blueprint
 
     def parse(self) -> Dict:
-        """
-        Main parsing method - orchestrates the analysis.
+        """Parse all Python files and return standardized routes result."""
+        python_files = find_source_files(str(self.project_path), self.FILE_EXTENSIONS)
 
-        Returns:
-            {
-                'analysis_type': 'api_routes',
-                'blueprints': [...],
-                'routes': [...],
-                'statistics': {...}
-            }
-        """
-        # Find all Python files
-        python_files = self._find_python_files()
-
-        # Parse each file
         for filepath in python_files:
-            self._parse_file(filepath)
+            self._parse_file(Path(filepath))
 
-        # Look for register_blueprint calls to get url_prefix
         for filepath in python_files:
-            self._find_blueprint_registration(filepath)
+            self._find_blueprint_registration(Path(filepath))
 
-        # Update route full URLs with registered prefixes
         self._update_route_urls()
-
-        # Update blueprint route counts
         self._update_blueprint_counts()
 
-        # Calculate statistics
-        statistics = self._calculate_statistics()
-
-        return {
-            'analysis_type': 'api_routes',
-            'version': '1.0',
-            'project_path': str(self.project_path),
-            'blueprints': self.blueprints,
-            'routes': self.routes,
-            'statistics': statistics
-        }
-
-    def _find_python_files(self) -> List[Path]:
-        """Find all Python files in the project directory."""
-        python_files = []
-
-        for root, dirs, files in os.walk(self.project_path):
-            # Skip common non-source directories
-            dirs[:] = [d for d in dirs if d not in [
-                '__pycache__', '.git', '.venv', 'venv', 'node_modules',
-                '.pytest_cache', '.tox', 'dist', 'build', '.eggs', 'tests'
-            ]]
-
-            for file in files:
-                if file.endswith('.py'):
-                    filepath = Path(root) / file
-                    python_files.append(filepath)
-
-        return python_files
+        return self.make_routes_result()
 
     def _parse_file(self, filepath: Path):
         """Parse a single Python file for routes and blueprints."""
@@ -311,9 +264,9 @@ class FlaskRoutesParser:
             self.routes.extend(visitor.routes)
 
         except SyntaxError as e:
-            print(f"Syntax error in {filepath}: {e}")
+            logger.warning("Failed to parse %s: %s", filepath, e)
         except Exception as e:
-            print(f"Error parsing {filepath}: {e}")
+            logger.warning("Failed to parse %s: %s", filepath, e)
 
     def _find_blueprint_registration(self, filepath: Path):
         """Find register_blueprint calls to get url_prefix."""
@@ -330,8 +283,8 @@ class FlaskRoutesParser:
                         if node.func.attr == 'register_blueprint':
                             self._parse_register_blueprint(node)
 
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("Failed to parse %s: %s", filepath, e)
 
     def _parse_register_blueprint(self, call: ast.Call):
         """Parse register_blueprint call for url_prefix."""
@@ -378,22 +331,3 @@ class FlaskRoutesParser:
         for bp in self.blueprints:
             bp['route_count'] = counts.get(bp['id'], 0)
 
-    def _calculate_statistics(self) -> Dict:
-        """Calculate statistics about the analyzed routes."""
-        # Count routes by method
-        routes_by_method = {}
-        for route in self.routes:
-            for method in route.get('methods', ['GET']):
-                routes_by_method[method] = routes_by_method.get(method, 0) + 1
-
-        # Count protected vs unprotected
-        protected = sum(1 for r in self.routes if r.get('security', {}).get('requires_auth', False))
-        unprotected = len(self.routes) - protected
-
-        return {
-            'total_blueprints': len(self.blueprints),
-            'total_routes': len(self.routes),
-            'routes_by_method': routes_by_method,
-            'protected_routes': protected,
-            'unprotected_routes': unprotected
-        }
