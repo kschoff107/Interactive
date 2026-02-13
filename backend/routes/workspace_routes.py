@@ -535,7 +535,7 @@ def save_workspace_layout(project_id, workspace_id):
 
         # Get workspace to know analysis_type
         cur.execute(
-            'SELECT id FROM workspaces WHERE id = %s AND project_id = %s',
+            'SELECT id, analysis_type FROM workspaces WHERE id = %s AND project_id = %s',
             (workspace_id, project_id)
         )
         workspace = cur.fetchone()

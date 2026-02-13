@@ -1,6 +1,6 @@
 # Code Visualizer - Design Document
 
-**Date:** February 4, 2026 (Updated: February 10, 2026 — Sticky Notes in All Views)
+**Date:** February 4, 2026 (Updated: February 12, 2026 — Multi-Language Parser Support)
 **Project:** Visual Backend Code Analyzer
 **Architecture:** Monolithic Flask App with Modular Parsers
 **Status:** MVP Deployed on Render
@@ -17,10 +17,11 @@
 - ✅ User registration and login
 - ✅ Project CRUD operations
 - ✅ File upload functionality
-- ✅ Parser Manager with framework detection
-- ✅ SQLAlchemy parser for Python projects
-- ✅ Runtime Flow parser (AST-based function/call analysis)
-- ✅ Flask Routes parser (API routes, blueprints, auth decorators)
+- ✅ Parser Manager with multi-language detection (Python, JS/TS, Java, C#, Ruby, Go, PHP, ABAP)
+- ✅ Base parser classes with shared utilities (comment stripping, brace counting, file discovery)
+- ✅ Database Schema parsers (13): SQLAlchemy, SQLite, Django ORM, Prisma, TypeORM, Sequelize, Mongoose, JPA/Hibernate, Entity Framework, ActiveRecord, Eloquent, GORM, ABAP Dictionary
+- ✅ Runtime Flow parsers (4): Python AST, JavaScript/TypeScript, Java, ABAP
+- ✅ API Routes parsers (11): Flask, Django, FastAPI, Express, NestJS, Spring Boot, ASP.NET, Rails, Laravel, Gin/Echo, ABAP ICF/OData
 - ✅ AI-powered code analysis with Claude API
 - ✅ GitHub API-based repository import (no full cloning)
 - ✅ Git API service with URL parsing, tree fetching, selective file download
@@ -80,7 +81,6 @@
 
 ### 🚧 In Progress / Planned
 
-- ⏳ Additional language parsers (TypeScript, JavaScript)
 - ⏳ Export functionality (PNG, SVG, PDF)
 - ⏳ Advanced filtering and search
 - ⏳ Private Git repository support (OAuth)
@@ -105,7 +105,7 @@ A web application that helps visual learners understand backend systems by analy
 **Tech Stack:**
 - Backend: Python/Flask with PostgreSQL
 - Frontend: React with React Flow
-- Analysis: Multiple language parsers (Python, TypeScript/JavaScript)
+- Analysis: Multiple language parsers (Python, JS/TS, Java, C#, Ruby, Go, PHP, ABAP)
 
 ---
 
@@ -137,9 +137,10 @@ A web application that helps visual learners understand backend systems by analy
 │  └─────────────────────────────────────┘   │
 │  ┌─────────────────────────────────────┐   │
 │  │  Language Parsers (modular)         │   │
-│  │  - parsers/python_parser.py         │   │
-│  │  - parsers/typescript_parser.py     │   │
-│  │  - parsers/javascript_parser.py     │   │
+│  │  - parsers/schema/ (13 parsers)     │   │
+│  │  - parsers/flow/   (4 parsers)      │   │
+│  │  - parsers/routes/ (11 parsers)     │   │
+│  │  - parsers/base.py (shared utils)   │   │
 │  └─────────────────────────────────────┘   │
 └──────────────────┬──────────────────────────┘
                    │
@@ -399,70 +400,98 @@ CREATE TABLE workspace_layouts (
 
 ## 4. Parser Architecture & Language Support
 
+**Directory Structure:**
+
+```
+backend/parsers/
+    __init__.py                    # Backward-compatible re-exports
+    base.py                        # BaseSchemaParser, BaseFlowParser, BaseRoutesParser, utilities
+    parser_manager.py              # Multi-language detection + routing
+
+    schema/                        # 13 parsers
+        sqlalchemy_parser.py       # Python — SQLAlchemy (AST)
+        sqlite_parser.py           # SQLite database files (direct DB query)
+        django_parser.py           # Python — Django ORM (AST)
+        prisma_parser.py           # JS/TS — Prisma (line-by-line DSL)
+        typeorm_parser.py          # TypeScript — TypeORM (regex + brace counting)
+        sequelize_parser.py        # JavaScript — Sequelize (regex)
+        mongoose_parser.py         # JS/TS — Mongoose (regex)
+        jpa_parser.py              # Java — JPA/Hibernate (regex + brace counting)
+        ef_parser.py               # C# — Entity Framework (regex, Data Annotations + Fluent API)
+        activerecord_parser.py     # Ruby — Rails ActiveRecord (regex, migrations + models)
+        gorm_parser.py             # Go — GORM (regex, struct tags)
+        eloquent_parser.py         # PHP — Laravel Eloquent (regex)
+        abap_dict_parser.py        # ABAP — Dictionary (regex, TYPES/DATA/CDS views)
+
+    flow/                          # 4 parsers
+        python_flow_parser.py      # Python (AST — functions, calls, control flow)
+        js_flow_parser.py          # JS/TS (regex — functions, arrows, classes)
+        java_flow_parser.py        # Java (regex — methods, calls, control flow)
+        abap_flow_parser.py        # ABAP (regex — FORM/PERFORM, METHOD, FUNCTION MODULE)
+
+    routes/                        # 11 parsers
+        flask_parser.py            # Python — Flask (AST)
+        django_routes_parser.py    # Python — Django (AST, urls.py + DRF ViewSets)
+        fastapi_parser.py          # Python — FastAPI (AST, decorators + Depends)
+        express_parser.py          # JS/TS — Express (regex)
+        nestjs_parser.py           # TypeScript — NestJS (regex + brace counting)
+        spring_parser.py           # Java — Spring Boot (regex + brace counting)
+        aspnet_parser.py           # C# — ASP.NET Core (regex + brace counting)
+        rails_routes_parser.py     # Ruby — Rails (regex, routes.rb DSL)
+        laravel_parser.py          # PHP — Laravel (regex, Route:: DSL)
+        gin_parser.py              # Go — Gin/Echo (regex)
+        abap_icf_parser.py         # ABAP — ICF/OData/RAP (regex)
+```
+
 **Parser Manager:**
 
-Routes analysis to correct parser based on detected language/framework.
+Routes analysis to correct parser based on detected language/framework. Detection checks manifest files in priority order:
 
 ```python
-# parsers/parser_manager.py
-
 class ParserManager:
-    def detect_language_and_framework(self, project_path):
-        """Scan project files to detect language/framework"""
-        if os.path.exists(f"{project_path}/requirements.txt"):
-            return self._detect_python_framework(project_path)
-        elif os.path.exists(f"{project_path}/package.json"):
-            return self._detect_js_framework(project_path)
-        # Add more detection logic
-
-    def parse_database_schema(self, project_path, language, framework):
-        """Route to appropriate parser"""
-        parser_map = {
-            ('python', 'sqlalchemy'): SQLAlchemyParser(),
-            ('python', 'django'): DjangoParser(),
-            ('typescript', 'prisma'): PrismaParser(),
-            ('javascript', 'sequelize'): SequelizeParser(),
-        }
-        parser = parser_map.get((language, framework))
-        if parser:
-            return parser.parse(project_path)
-        else:
-            raise UnsupportedFrameworkError()
+    def detect_all(self, project_path) -> List[Tuple[str, str]]:
+        """Detect all languages/frameworks present in a project."""
+        # Priority order:
+        # 1. SQLite databases (.db, .sqlite, .sqlite3)
+        # 2. Python (requirements.txt, setup.py, pyproject.toml)
+        # 3. Prisma (.prisma files)
+        # 4. JS/TS (package.json → inspect deps for Express, NestJS, Prisma, etc.)
+        # 5. Java (pom.xml, build.gradle → inspect for Spring, JPA)
+        # 6. C# (.csproj, .sln → inspect for EF, ASP.NET)
+        # 7. Ruby (Gemfile → inspect for Rails)
+        # 8. Go (go.mod → inspect for Gin, GORM)
+        # 9. PHP (composer.json → inspect for Laravel)
+        # 10. ABAP (.abap files)
+        # 11. Fallback: scan source file extensions
 ```
 
-**Individual Parser Structure:**
+**Base Classes (`base.py`):**
 
-```python
-# parsers/python_parser.py
+Shared utilities used by all parsers — zero new dependencies (all stdlib):
 
-class SQLAlchemyParser:
-    def parse(self, project_path) -> Dict:
-        """Parse SQLAlchemy models and return standardized schema"""
-        tables = []
-        model_files = self._find_model_files(project_path)
+- `BaseSchemaParser` — `parse()`, `find_files()`, `make_schema_result()`, `_detect_relationships()`
+- `BaseFlowParser` — `parse()`, `make_flow_result()`, `_resolve_calls()`, `_detect_entry_points()`
+- `BaseRoutesParser` — `parse()`, `make_routes_result()`, `_calculate_statistics()`
+- `strip_comments(content, language)` — removes comments and string literals before regex parsing (supports c_family, python, ruby, php, abap)
+- `extract_block_body(content, start)` — brace counting for class/method body extraction
+- `find_source_files(path, extensions)` — recursive file discovery with common directory exclusions
 
-        for file_path in model_files:
-            with open(file_path, 'r') as f:
-                tree = ast.parse(f.read())
-                tables.extend(self._extract_tables_from_ast(tree))
+**Parsing Strategies:**
 
-        relationships = self._detect_relationships(tables)
-
-        return {
-            'tables': tables,
-            'relationships': relationships
-        }
-```
+| Language | Strategy | Notes |
+|----------|----------|-------|
+| Python | AST (`ast.parse`) | Full fidelity, handles all syntax |
+| Prisma | Line-by-line DSL | `.prisma` files have simple grammar |
+| Java, C#, TypeScript | Regex + brace counting | Compiled patterns, `strip_comments()` prevents false matches |
+| Ruby, PHP, Go | Regex | Custom comment strippers preserve string literals |
+| ABAP | Regex + uppercase normalization | Case-insensitive language |
+| SQLite | Direct database query | `sqlite3` module reads `sqlite_master` |
 
 **Standardized Output:**
-- All parsers return the same JSON structure
-- Frontend is language-agnostic
+- All parsers return the same JSON structure per analysis type
+- Frontend is completely language-agnostic
 - Easy to add new parsers without changing frontend
-
-**Language Support Phases:**
-- **Phase 1:** Python (SQLAlchemy, Django ORM)
-- **Phase 2:** TypeScript/JavaScript (Prisma, TypeORM)
-- **Phase 3:** Additional frameworks as needed
+- Old import paths (`from backend.parsers.sqlalchemy_parser import ...`) still work via shim files
 
 ---
 
@@ -757,14 +786,33 @@ def test_create_project_upload(client, auth_token):
 ```
 
 ### Test Fixtures
-Create sample projects for each framework to test against:
+Sample projects for each framework/language:
 ```
 tests/fixtures/
-├── sqlalchemy_simple/
-├── sqlalchemy_complex/
-├── django_basic/
-├── prisma_example/
-└── typescript_typeorm/
+├── django_models/          # Django ORM models
+├── django_urls/            # Django URL configuration + DRF router
+├── fastapi_routes/         # FastAPI app with routers and Depends
+├── prisma_schema/          # Prisma schema with 5 models + enum
+├── typeorm_models/         # TypeORM entities with decorators
+├── sequelize_models/       # Sequelize define() + Model.init()
+├── mongoose_models/        # Mongoose schemas with refs
+├── jpa_models/             # JPA entities with annotations
+├── ef_models/              # EF DbContext + Data Annotations + Fluent API
+├── activerecord/           # Rails migrations + model associations
+├── eloquent_models/        # Laravel Eloquent models + migrations
+├── gorm_models/            # Go GORM structs with tags
+├── express_routes/         # Express routers with middleware
+├── nestjs_routes/          # NestJS controllers with guards
+├── spring_routes/          # Spring Boot REST controllers
+├── aspnet_routes/          # ASP.NET API controllers
+├── rails_routes/           # Rails routes.rb DSL
+├── laravel_routes/         # Laravel Route:: definitions
+├── gin_routes/             # Go Gin route groups
+├── js_flow/                # JS/TS functions and classes
+├── java_flow/              # Java methods and control flow
+├── abap_dictionary/        # ABAP TYPES/DATA/CDS views
+├── abap_flow/              # ABAP FORM/METHOD/events
+└── abap_icf/               # ABAP OData DPC + RAP + ICF handlers
 ```
 
 **Frontend Testing:**
@@ -809,6 +857,7 @@ test('allows adding sticky notes', () => {
 - PostgreSQL 14+
 - GitPython (Git operations)
 - AST module (Python parsing)
+- Regex + brace counting (non-Python language parsing — zero extra dependencies)
 
 **Frontend:**
 - React 18+
@@ -934,6 +983,11 @@ code-visualizer/
 │   ├── routes/
 │   │   └── workspace_routes.py      # Workspace CRUD + file upload + scoped data endpoints
 │   ├── parsers/
+│   │   ├── base.py                    # Shared base classes + utilities
+│   │   ├── parser_manager.py          # Multi-language detection + routing
+│   │   ├── schema/                    # 13 schema parsers
+│   │   ├── flow/                      # 4 flow parsers
+│   │   └── routes/                    # 11 routes parsers
 │   ├── services/
 │   │   ├── code_analysis_service.py  # AI-powered analysis
 │   │   └── git_api_service.py        # GitHub API integration
@@ -987,31 +1041,27 @@ code-visualizer/
 22. ✅ **Database schema analyze endpoint** — `POST /workspaces/{ws_id}/analyze/database-schema` runs parser on workspace files; frontend triggers analysis after upload instead of just reloading
 23. ✅ **GitHub API token support** — optional `GITHUB_TOKEN` env var for authenticated requests (5,000 req/hour vs 60 unauthenticated); applied to all git API service calls
 24. ✅ **Sticky notes in all views** — Runtime Flow and API Routes views now have sticky notes and full toolbar (zoom, add note, theme toggle); notes persist via layout save; excluded from dagre auto-layout; preserved during Quick Organize
+25. ✅ **Multi-language parser support** — 27 new parsers across 8 languages (Python, JS/TS, Java, C#, Ruby, Go, PHP, ABAP); modular directory structure (`parsers/schema/`, `parsers/flow/`, `parsers/routes/`); shared base classes with comment stripping, brace counting, and file discovery utilities; ParserManager rewritten with multi-language detection from manifest files; backward-compatible shim imports; zero new dependencies; 24 test fixtures covering all parsers; see `docs/plans/2026-02-12-multi-language-parsers.md` for full implementation details
 
 ## Next Steps
 
 1. **Add export functionality** (PNG, SVG, PDF, Markdown)
-2. **Build additional parsers:**
-   - Django ORM parser
-   - Prisma parser (TypeScript)
-   - TypeORM parser
-   - Sequelize parser (JavaScript)
-4. **Add workspace features:**
+2. **Add workspace features:**
    - Table search and filtering
-5. **Write comprehensive tests:**
-   - Parser unit tests
+3. **Write comprehensive tests:**
+   - Parser unit tests for all 28 parsers
    - API endpoint tests
    - Component tests
    - E2E tests
-6. **Performance optimization:**
+4. **Performance optimization:**
    - Handle large codebases
    - Optimize React Flow rendering
    - Add pagination for projects
-7. **User experience improvements:**
+5. **User experience improvements:**
    - Better error messages
    - Loading states
    - Onboarding tutorial
-8. **Security hardening:**
+6. **Security hardening:**
    - Rate limiting
    - File upload sanitization
    - CORS configuration review
@@ -1040,7 +1090,7 @@ code-visualizer/
 - ~~"Re-import" button to refresh files from repo~~ ✅ Done (refresh button in Source Files panel)
 - Collaborative workspaces (multi-user)
 - Real-time collaboration on diagrams
-- More language/framework support
+- ~~More language/framework support~~ ✅ Done (28 parsers across 8 languages)
 - AI-powered insights and recommendations
 - Integration with CI/CD pipelines
 - VSCode extension

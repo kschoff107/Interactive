@@ -43,3 +43,17 @@
   rx: 4;
   ry: 4;
 }
+
+/* Smooth transitions for edge/node highlighting on hover */
+.react-flow__edge path {
+  transition: opacity 0.2s ease, stroke-width 0.2s ease;
+}
+
+/* Widen the invisible hover target so edges are easier to select */
+.react-flow__edge .react-flow__edge-interaction {
+  stroke-width: 20px;
+}
+
+.react-flow__node {
+  transition: opacity 0.2s ease;
+}

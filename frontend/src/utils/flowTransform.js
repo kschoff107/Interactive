@@ -48,7 +48,8 @@ export const transformFlowData = (flowData) => {
           animated: true,
           style: {
             stroke: call.is_conditional ? '#f59e0b' : '#3b82f6',
-            strokeWidth: 2,
+            strokeWidth: 1.5,
+            opacity: 0.7,
           },
           labelStyle: {
             fontSize: '10px',

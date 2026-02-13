@@ -17,6 +17,7 @@ import ApiRoutesInsightGuide from './ApiRoutesInsightGuide';
 import { transformApiRoutesData, estimateRouteNodeHeight, getRouteNodeWidth } from '../../utils/apiRoutesTransform';
 import { applySavedLayout } from '../../utils/layoutUtils';
 import { useStickyNotes, restoreStickyNotesFromLayout } from '../../hooks/useStickyNotes';
+import { useEdgeHighlighting } from '../../hooks/useEdgeHighlighting';
 
 // Register custom node types for API routes
 const nodeTypes = {
@@ -38,8 +39,8 @@ const getLayoutedRouteElements = (nodes, edges, direction = 'TB') => {
 
   dagreGraph.setGraph({
     rankdir: direction,
-    nodesep: 80,
-    ranksep: 100,
+    nodesep: 120,
+    ranksep: 160,
     marginx: 50,
     marginy: 50,
   });
@@ -199,6 +200,16 @@ export default function ApiRoutesVisualization({ routesData, isDark, onToggleThe
     );
   }, [edges, filteredNodes, methodFilter]);
 
+  // Edge highlighting on hover (uses filtered data so highlighting respects active filter)
+  const {
+    highlightedNodes: displayNodes,
+    highlightedEdges: displayEdges,
+    onNodeMouseEnter,
+    onNodeMouseLeave,
+    onEdgeMouseEnter,
+    onEdgeMouseLeave,
+  } = useEdgeHighlighting(filteredNodes, filteredEdges);
+
   if (!routesData || nodes.length === 0) {
     return (
       <div className="flex items-center justify-center h-full">
@@ -230,10 +241,14 @@ export default function ApiRoutesVisualization({ routesData, isDark, onToggleThe
   return (
     <div className="w-full h-full relative">
       <ReactFlow
-        nodes={filteredNodes}
-        edges={filteredEdges}
+        nodes={displayNodes}
+        edges={displayEdges}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
+        onNodeMouseEnter={onNodeMouseEnter}
+        onNodeMouseLeave={onNodeMouseLeave}
+        onEdgeMouseEnter={onEdgeMouseEnter}
+        onEdgeMouseLeave={onEdgeMouseLeave}
         nodeTypes={nodeTypes}
         fitView
         fitViewOptions={{ padding: 0.2, maxZoom: 1 }}

@@ -55,7 +55,7 @@ export const transformApiRoutesData = (routesData) => {
         source: route.blueprint_id,
         target: route.id,
         type: 'smoothstep',
-        style: { stroke: '#94a3b8', strokeWidth: 2 },
+        style: { stroke: '#94a3b8', strokeWidth: 1.5, opacity: 0.7 },
         animated: false,
       });
     }

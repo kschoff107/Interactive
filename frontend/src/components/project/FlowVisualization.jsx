@@ -19,6 +19,7 @@ import InsightGuide from './InsightGuide';
 import { transformFlowData, estimateFlowNodeHeight, getFlowNodeWidth } from '../../utils/flowTransform';
 import { detectCircularEdges, applySavedLayout } from '../../utils/layoutUtils';
 import { useStickyNotes, restoreStickyNotesFromLayout } from '../../hooks/useStickyNotes';
+import { useEdgeHighlighting } from '../../hooks/useEdgeHighlighting';
 
 // Register custom node types for runtime flow
 const nodeTypes = {
@@ -42,8 +43,8 @@ const getLayoutedFlowElements = (nodes, edges, direction = 'TB') => {
 
   dagreGraph.setGraph({
     rankdir: direction,
-    nodesep: 100,
-    ranksep: 150,
+    nodesep: 160,
+    ranksep: 220,
     marginx: 50,
     marginy: 50,
   });
@@ -125,6 +126,16 @@ export default function FlowVisualization({ flowData, isDark, onToggleTheme, lay
   const { handleNoteTextChange, handleNoteColorChange, handleDeleteNote, handleAddNote } =
     useStickyNotes(setNodes, onNodesDragged);
 
+  // Edge highlighting on hover
+  const {
+    highlightedNodes,
+    highlightedEdges,
+    onNodeMouseEnter,
+    onNodeMouseLeave,
+    onEdgeMouseEnter,
+    onEdgeMouseLeave,
+  } = useEdgeHighlighting(nodes, edges);
+
   // Transform and layout flow data on initial load
   useEffect(() => {
     if (flowData) {
@@ -203,10 +214,14 @@ export default function FlowVisualization({ flowData, isDark, onToggleTheme, lay
   return (
     <div className="w-full h-full relative">
       <ReactFlow
-        nodes={nodes}
-        edges={edges}
+        nodes={highlightedNodes}
+        edges={highlightedEdges}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
+        onNodeMouseEnter={onNodeMouseEnter}
+        onNodeMouseLeave={onNodeMouseLeave}
+        onEdgeMouseEnter={onEdgeMouseEnter}
+        onEdgeMouseLeave={onEdgeMouseLeave}
         nodeTypes={nodeTypes}
         fitView
         fitViewOptions={{ padding: 0.2, maxZoom: 1 }}
