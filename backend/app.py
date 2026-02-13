@@ -52,6 +52,11 @@ def handle_unprocessable_entity(error):
     print(traceback.format_exc())
     return jsonify({'error': 'Unprocessable entity', 'details': str(error)}), 422
 
+# Health check endpoint for Render
+@app.route('/')
+def health_check():
+    return jsonify({'status': 'ok'}), 200
+
 # Register routes
 from routes import init_routes
 init_routes(app)
