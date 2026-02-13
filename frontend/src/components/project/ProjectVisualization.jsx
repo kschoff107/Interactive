@@ -67,6 +67,11 @@ export default function ProjectVisualization() {
   const flowNodesRef = useRef([]);
   const apiNodesRef = useRef([]);
 
+  // Memoized callbacks for child visualization components
+  const handleFlowNodesUpdate = useCallback((n) => { flowNodesRef.current = n; }, []);
+  const handleApiNodesUpdate = useCallback((n) => { apiNodesRef.current = n; }, []);
+  const handleChildNodesDragged = useCallback(() => setHasUnsavedChanges(true), []);
+
   // Saved layout for flow/api views
   const [workspaceLayout, setWorkspaceLayout] = useState(null);
 
@@ -1056,8 +1061,8 @@ export default function ProjectVisualization() {
                     layoutTrigger={flowLayoutTrigger}
                     projectId={projectId}
                     savedLayout={workspaceLayout}
-                    onNodesUpdate={(n) => { flowNodesRef.current = n; }}
-                    onNodesDragged={() => setHasUnsavedChanges(true)}
+                    onNodesUpdate={handleFlowNodesUpdate}
+                    onNodesDragged={handleChildNodesDragged}
                   />
                 )}
               </>
@@ -1081,8 +1086,8 @@ export default function ProjectVisualization() {
                     layoutTrigger={apiRoutesLayoutTrigger}
                     projectId={projectId}
                     savedLayout={workspaceLayout}
-                    onNodesUpdate={(n) => { apiNodesRef.current = n; }}
-                    onNodesDragged={() => setHasUnsavedChanges(true)}
+                    onNodesUpdate={handleApiNodesUpdate}
+                    onNodesDragged={handleChildNodesDragged}
                   />
                 )}
               </>
