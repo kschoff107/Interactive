@@ -61,6 +61,15 @@ def verify_project_ownership(cur, project_id, user_id):
     return cur.fetchone()
 
 
+def verify_workspace(cur, workspace_id, project_id):
+    """Verify workspace exists and belongs to project. Returns full workspace row or None."""
+    cur.execute(
+        'SELECT * FROM workspaces WHERE id = %s AND project_id = %s',
+        (workspace_id, project_id)
+    )
+    return cur.fetchone()
+
+
 # ---------------------------------------------------------------------------
 # Workspace CRUD
 # ---------------------------------------------------------------------------
@@ -202,12 +211,7 @@ def rename_workspace(project_id, workspace_id):
         if not verify_project_ownership(cur, project_id, user_id):
             return jsonify({'error': 'Project not found'}), 404
 
-        # Verify workspace belongs to this project
-        cur.execute(
-            'SELECT id FROM workspaces WHERE id = %s AND project_id = %s',
-            (workspace_id, project_id)
-        )
-        if not cur.fetchone():
+        if not verify_workspace(cur, workspace_id, project_id):
             return jsonify({'error': 'Workspace not found'}), 404
 
         cur.execute(
@@ -231,12 +235,7 @@ def delete_workspace(project_id, workspace_id):
         if not verify_project_ownership(cur, project_id, user_id):
             return jsonify({'error': 'Project not found'}), 404
 
-        # Get workspace info
-        cur.execute(
-            'SELECT id FROM workspaces WHERE id = %s AND project_id = %s',
-            (workspace_id, project_id)
-        )
-        workspace = cur.fetchone()
+        workspace = verify_workspace(cur, workspace_id, project_id)
         if not workspace:
             return jsonify({'error': 'Workspace not found'}), 404
 
@@ -276,11 +275,7 @@ def list_workspace_files(project_id, workspace_id):
         if not verify_project_ownership(cur, project_id, user_id):
             return jsonify({'error': 'Project not found'}), 404
 
-        cur.execute(
-            'SELECT id FROM workspaces WHERE id = %s AND project_id = %s',
-            (workspace_id, project_id)
-        )
-        if not cur.fetchone():
+        if not verify_workspace(cur, workspace_id, project_id):
             return jsonify({'error': 'Workspace not found'}), 404
 
         cur.execute(
@@ -314,12 +309,7 @@ def upload_workspace_files(project_id, workspace_id):
         if not project:
             return jsonify({'error': 'Project not found'}), 404
 
-        cur.execute(
-            'SELECT id FROM workspaces WHERE id = %s AND project_id = %s',
-            (workspace_id, project_id)
-        )
-        workspace = cur.fetchone()
-        if not workspace:
+        if not verify_workspace(cur, workspace_id, project_id):
             return jsonify({'error': 'Workspace not found'}), 404
 
         # Create workspace file directory
@@ -424,13 +414,7 @@ def import_source_files(project_id, workspace_id):
         if not project.get('git_url'):
             return jsonify({'error': 'This project is not linked to a GitHub repository'}), 400
 
-        # Verify workspace belongs to project
-        cur.execute(
-            'SELECT id FROM workspaces WHERE id = %s AND project_id = %s',
-            (workspace_id, project_id)
-        )
-        workspace = cur.fetchone()
-        if not workspace:
+        if not verify_workspace(cur, workspace_id, project_id):
             return jsonify({'error': 'Workspace not found'}), 404
 
         # Parse git URL and download files
@@ -507,10 +491,16 @@ def get_workspace_layout(project_id, workspace_id):
     if not layout_data:
         return jsonify({'layout': None}), 200
 
+    try:
+        parsed_layout = json.loads(layout_data['layout_data'])
+    except (json.JSONDecodeError, TypeError) as e:
+        logger.error('Corrupt layout data for workspace %s: %s', workspace_id, e)
+        return jsonify({'error': 'Saved layout data is corrupted. Try re-saving the layout.'}), 500
+
     return jsonify({
         'layout': {
             'id': layout_data['id'],
-            'layout_data': json.loads(layout_data['layout_data']),
+            'layout_data': parsed_layout,
             'updated_at': layout_data['updated_at']
         }
     }), 200
@@ -533,12 +523,7 @@ def save_workspace_layout(project_id, workspace_id):
         if not verify_project_ownership(cur, project_id, user_id):
             return jsonify({'error': 'Project not found'}), 404
 
-        # Get workspace to know analysis_type
-        cur.execute(
-            'SELECT id, analysis_type FROM workspaces WHERE id = %s AND project_id = %s',
-            (workspace_id, project_id)
-        )
-        workspace = cur.fetchone()
+        workspace = verify_workspace(cur, workspace_id, project_id)
         if not workspace:
             return jsonify({'error': 'Workspace not found'}), 404
 
@@ -599,10 +584,16 @@ def get_workspace_analysis(project_id, workspace_id):
     if not analysis_data:
         return jsonify({'error': 'No analysis found'}), 404
 
+    try:
+        parsed_result = json.loads(analysis_data['result_data'])
+    except (json.JSONDecodeError, TypeError) as e:
+        logger.error('Corrupt analysis data for workspace %s: %s', workspace_id, e)
+        return jsonify({'error': 'Stored analysis data is corrupted. Try re-running the analysis.'}), 500
+
     return jsonify({
         'analysis_id': analysis_data['id'],
         'analysis_type': analysis_data['analysis_type'],
-        'schema': json.loads(analysis_data['result_data']),
+        'schema': parsed_result,
         'created_at': analysis_data['created_at']
     }), 200
 
@@ -630,9 +621,15 @@ def get_workspace_runtime_flow(project_id, workspace_id):
     if not analysis_data:
         return jsonify({'error': 'No runtime flow analysis found'}), 404
 
+    try:
+        parsed_result = json.loads(analysis_data['result_data'])
+    except (json.JSONDecodeError, TypeError) as e:
+        logger.error('Corrupt runtime flow data for workspace %s: %s', workspace_id, e)
+        return jsonify({'error': 'Stored analysis data is corrupted. Try re-running the analysis.'}), 500
+
     return jsonify({
         'analysis_id': analysis_data['id'],
-        'flow': json.loads(analysis_data['result_data']),
+        'flow': parsed_result,
         'created_at': analysis_data['created_at']
     }), 200
 
@@ -650,13 +647,7 @@ def analyze_workspace_runtime_flow(project_id, workspace_id):
         if not project:
             return jsonify({'error': 'Project not found'}), 404
 
-        # Verify workspace
-        cur.execute(
-            'SELECT id FROM workspaces WHERE id = %s AND project_id = %s',
-            (workspace_id, project_id)
-        )
-        workspace = cur.fetchone()
-        if not workspace:
+        if not verify_workspace(cur, workspace_id, project_id):
             return jsonify({'error': 'Workspace not found'}), 404
 
         # Use workspace-specific file directory
@@ -702,7 +693,8 @@ def analyze_workspace_runtime_flow(project_id, workspace_id):
             return jsonify({'error': str(e)}), 400
         except Exception as e:
             conn.rollback()
-            return jsonify({'error': f'Runtime flow analysis failed: {str(e)}'}), 500
+            logger.exception('Runtime flow analysis failed for workspace %s', workspace_id)
+            return jsonify({'error': 'Runtime flow analysis failed. Please try again or contact support.'}), 500
 
 
 @workspaces_bp.route('/<int:project_id>/workspaces/<int:workspace_id>/api-routes', methods=['GET'])
@@ -728,9 +720,15 @@ def get_workspace_api_routes(project_id, workspace_id):
     if not analysis_data:
         return jsonify({'error': 'No API routes analysis found'}), 404
 
+    try:
+        parsed_result = json.loads(analysis_data['result_data'])
+    except (json.JSONDecodeError, TypeError) as e:
+        logger.error('Corrupt API routes data for workspace %s: %s', workspace_id, e)
+        return jsonify({'error': 'Stored analysis data is corrupted. Try re-running the analysis.'}), 500
+
     return jsonify({
         'analysis_id': analysis_data['id'],
-        'routes': json.loads(analysis_data['result_data']),
+        'routes': parsed_result,
         'created_at': analysis_data['created_at']
     }), 200
 
@@ -748,13 +746,7 @@ def analyze_workspace_api_routes(project_id, workspace_id):
         if not project:
             return jsonify({'error': 'Project not found'}), 404
 
-        # Verify workspace
-        cur.execute(
-            'SELECT id FROM workspaces WHERE id = %s AND project_id = %s',
-            (workspace_id, project_id)
-        )
-        workspace = cur.fetchone()
-        if not workspace:
+        if not verify_workspace(cur, workspace_id, project_id):
             return jsonify({'error': 'Workspace not found'}), 404
 
         # Use workspace-specific file directory
@@ -800,7 +792,8 @@ def analyze_workspace_api_routes(project_id, workspace_id):
             return jsonify({'error': str(e)}), 400
         except Exception as e:
             conn.rollback()
-            return jsonify({'error': f'API routes analysis failed: {str(e)}'}), 500
+            logger.exception('API routes analysis failed for workspace %s', workspace_id)
+            return jsonify({'error': 'API routes analysis failed. Please try again or contact support.'}), 500
 
 
 @workspaces_bp.route('/<int:project_id>/workspaces/<int:workspace_id>/analyze/database-schema', methods=['POST'])
@@ -816,13 +809,7 @@ def analyze_workspace_database_schema(project_id, workspace_id):
         if not project:
             return jsonify({'error': 'Project not found'}), 404
 
-        # Verify workspace
-        cur.execute(
-            'SELECT id FROM workspaces WHERE id = %s AND project_id = %s',
-            (workspace_id, project_id)
-        )
-        workspace = cur.fetchone()
-        if not workspace:
+        if not verify_workspace(cur, workspace_id, project_id):
             return jsonify({'error': 'Workspace not found'}), 404
 
         # Use workspace-specific file directory
@@ -869,4 +856,5 @@ def analyze_workspace_database_schema(project_id, workspace_id):
             return jsonify({'error': str(e)}), 400
         except Exception as e:
             conn.rollback()
-            return jsonify({'error': f'Database schema analysis failed: {str(e)}'}), 500
+            logger.exception('Database schema analysis failed for workspace %s', workspace_id)
+            return jsonify({'error': 'Database schema analysis failed. Please try again or contact support.'}), 500

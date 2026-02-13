@@ -49,7 +49,7 @@
   transition: opacity 0.2s ease, stroke-width 0.2s ease;
 }
 
-/* Widen the invisible hover target so edges are easier to select */
+/* Widen the invisible hover target so edges are easier to hover over */
 .react-flow__edge .react-flow__edge-interaction {
   stroke-width: 20px;
 }
