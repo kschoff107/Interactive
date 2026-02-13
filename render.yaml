@@ -3,7 +3,7 @@ services:
   - type: web
     name: code-visualizer-api
     runtime: python
-    buildCommand: "pip install -r backend/requirements.txt && cd backend && python init_db.py"
+    buildCommand: "pip install -r backend/requirements.txt && cd backend && python -m db.init_db"
     startCommand: "cd backend && gunicorn --bind 0.0.0.0:$PORT app:app"
     envVars:
       - key: DATABASE_URL

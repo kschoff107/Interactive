@@ -34,7 +34,7 @@ def client():
 @pytest.fixture
 def auth_token(client):
     """Create auth token for test user"""
-    from database import get_connection
+    from db import get_connection
     from models import User
     from app import app
 
@@ -95,7 +95,7 @@ def project_with_files(project_with_auth):
         f.write('def format_date(d): return str(d)\n')
 
     # Update project file_path in DB
-    from database import get_connection
+    from db import get_connection
     with get_connection() as conn:
         cur = conn.cursor()
         cur.execute('UPDATE projects SET file_path = %s WHERE id = %s',
@@ -120,7 +120,7 @@ def test_files_wrong_user(client, project_with_auth):
     """GET /files with different user's token returns 404"""
     project_id, _, _ = project_with_auth
     from app import app
-    from database import get_connection
+    from db import get_connection
     from models import User
 
     with app.app_context():
@@ -165,7 +165,7 @@ def test_files_nonexistent_path(client, project_with_auth):
     """Project with file_path pointing to missing directory returns empty list"""
     project_id, token, _ = project_with_auth
 
-    from database import get_connection
+    from db import get_connection
     with get_connection() as conn:
         cur = conn.cursor()
         cur.execute('UPDATE projects SET file_path = %s WHERE id = %s',
@@ -249,7 +249,7 @@ def test_files_empty_directory(client, project_with_auth):
 
     tmp_dir = tempfile.mkdtemp(prefix='codevis_test_empty_')
 
-    from database import get_connection
+    from db import get_connection
     with get_connection() as conn:
         cur = conn.cursor()
         cur.execute('UPDATE projects SET file_path = %s WHERE id = %s',

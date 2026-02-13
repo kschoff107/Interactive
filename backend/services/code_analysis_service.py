@@ -6,7 +6,7 @@ from typing import Optional, Dict, Any
 
 import anthropic
 from config import Config
-from database import get_connection
+from db import get_connection
 from models import CodeAnalysis
 
 

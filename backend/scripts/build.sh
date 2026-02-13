@@ -10,6 +10,6 @@ pip install -r requirements.txt
 mkdir -p ../storage
 
 # Initialize database
-python init_db.py
+python -m db.init_db
 
 echo "Backend build completed successfully!"

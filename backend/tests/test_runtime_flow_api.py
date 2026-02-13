@@ -10,7 +10,7 @@ from flask_jwt_extended import create_access_token
 @pytest.fixture
 def auth_token(client):
     """Create auth token for test user"""
-    from database import get_connection
+    from db import get_connection
     from models import User
     from app import app
 
@@ -54,7 +54,7 @@ def test_project(client, auth_token):
         shutil.copy(py_file, dest)
 
     # Update project file_path
-    from database import get_connection
+    from db import get_connection
     with get_connection() as conn:
         cur = conn.cursor()
         cur.execute('UPDATE projects SET file_path = %s WHERE id = %s', (str(dest), project_id))

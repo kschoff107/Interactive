@@ -1,5 +1,5 @@
 import pytest
-from database import get_connection
+from db import get_connection
 
 @pytest.fixture
 def client():

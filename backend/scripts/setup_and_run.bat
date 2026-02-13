@@ -34,7 +34,7 @@ if not exist ".env" (
 
 REM Initialize database
 echo Initializing database...
-python init_db.py
+python -m db.init_db
 echo.
 
 REM Run the application

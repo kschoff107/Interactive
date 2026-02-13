@@ -4,7 +4,7 @@ from flask_jwt_extended import create_access_token
 @pytest.fixture
 def auth_token():
     """Create auth token for test user"""
-    from database import get_connection
+    from db import get_connection
     from models import User
 
     with get_connection() as conn:

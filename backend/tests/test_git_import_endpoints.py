@@ -30,7 +30,7 @@ def client():
 @pytest.fixture
 def auth_token(client):
     """Create auth token for test user (matches existing pattern)"""
-    from database import get_connection
+    from db import get_connection
     from models import User
     from app import app
 
@@ -430,7 +430,7 @@ class TestImportFromGit:
 def clean_git_test_data():
     """Clean up test data after each test"""
     yield
-    from database import get_connection
+    from db import get_connection
     with get_connection() as conn:
         cur = conn.cursor()
         cur.execute("DELETE FROM analysis_results WHERE project_id IN (SELECT id FROM projects WHERE name = 'Git Import Test')")

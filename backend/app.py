@@ -57,7 +57,7 @@ from routes import init_routes
 init_routes(app)
 
 # Initialize database (runs on import, including gunicorn)
-from init_db import init_database
+from db.init_db import init_database
 init_database()
 
 if __name__ == '__main__':
